@@ -22,6 +22,7 @@
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
 #include "ship.h"
+#include <TFJson.h>
 
 
 void EEBus::pre_setup()
@@ -66,6 +67,17 @@ void EEBus::register_urls()
 
         ship.print_skis(&sb);
 
+        return request.send(200, "application/json", sb.getPtr());
+    });
+
+api.addCommand("eebus/discover_devices", Config::Null(), {}, [this](String &/*errmsg*/) {
+        ship.scan_skis();
+    }, true);
+    server.on("/eebus/discovered_devices", HTTP_GET, [this](WebServerRequest request) {
+        StringBuilder sb;
+        
+        ship.print_skis(&sb);
+        
         return request.send(200, "application/json", sb.getPtr());
     });
 

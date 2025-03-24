@@ -89,12 +89,16 @@ private:
 
 
 
+
+
 public:
     Ship(){}
     
     void pre_setup();
     void setup();
     void remove(const ShipConnection &ship_connection);
+    void scan_skis();
+    void print_skis(StringBuilder *sb);
     void scan_skis();
     void print_skis(StringBuilder *sb);
 
