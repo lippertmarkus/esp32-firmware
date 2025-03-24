@@ -19,14 +19,18 @@
 
 #pragma once
 
-#include "module.h"
 #include "config.h"
+#include "module.h"
 #include "ship.h"
+#include <TFJson.h>
+
 
 class EEBus final : public IModule
 {
 public:
-    EEBus(){}
+    EEBus()
+    {
+    }
     void pre_setup() override;
     void setup() override;
     void register_urls() override;
