@@ -52,6 +52,9 @@ static void button_state_changed_handler(TF_RGBLEDButton *rgb_led_button, uint8_
 
     // Update button state from RGB LED Button Bricklet button-state-changed callback
     tutorial->state.get("button")->updateBool(button_state == TF_RGB_LED_BUTTON_BUTTON_STATE_PRESSED);
+    if(button_state == TF_RGB_LED_BUTTON_BUTTON_STATE_PRESSED) {
+        tutorial->config.get("color")->updateString("#00FF00");
+    } 
 }
 
 void TutorialPhase5::pre_setup()
