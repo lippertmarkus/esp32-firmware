@@ -24,6 +24,8 @@
 #include "ship.h"
 #include <TFJson.h>
 
+#define MAX_SHIP_PEER_REMEMBERED 64 // How man ship peers configured to be remembered
+
 
 class EEBus final : public IModule
 {
@@ -37,6 +39,10 @@ public:
 
     ConfigRoot config;
     ConfigRoot state;
-
+    ConfigRoot peers; // TODO: Merge this into config once i figure out the frontend
+    
     Ship ship;
+private:
+    
+    ConfigRoot ship_peer;
 };
