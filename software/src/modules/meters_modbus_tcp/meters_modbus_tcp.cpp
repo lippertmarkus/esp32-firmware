@@ -108,8 +108,8 @@ void MetersModbusTCP::pre_setup()
         {"device_address", Config::Uint(1, 1, 247)},
     })});
 
-    table_prototypes.push_back({MeterModbusTCPTableID::FroniusGEN24PlusHybridInverter, Config::Object({
-        {"virtual_meter", Config::Enum(FroniusGEN24PlusHybridInverterVirtualMeter::None)},
+    table_prototypes.push_back({MeterModbusTCPTableID::FroniusGEN24Plus, Config::Object({
+        {"virtual_meter", Config::Enum(FroniusGEN24PlusVirtualMeter::None)},
         {"device_address", Config::Uint(1, 1, 247)},
     })});
 
@@ -165,12 +165,34 @@ void MetersModbusTCP::pre_setup()
     table_prototypes.push_back({MeterModbusTCPTableID::CarloGavazziEM530, carlo_gavazzi});
     table_prototypes.push_back({MeterModbusTCPTableID::CarloGavazziEM540, carlo_gavazzi});
 
-    table_prototypes.push_back({MeterModbusTCPTableID::SolaredgeInverter, Config::Object({
-        {"virtual_meter", Config::Enum(SolaredgeInverterVirtualMeter::None)},
+    table_prototypes.push_back({MeterModbusTCPTableID::Solaredge, Config::Object({
+        {"virtual_meter", Config::Enum(SolaredgeVirtualMeter::None)},
         {"device_address", Config::Uint(1, 1, 247)},
     })});
 
     table_prototypes.push_back({MeterModbusTCPTableID::EastronSDM630TCP, Config::Object({
+        {"device_address", Config::Uint(1, 1, 247)},
+    })});
+
+    table_prototypes.push_back({MeterModbusTCPTableID::TinkerforgeWARPCharger, *Config::Null()});
+
+    table_prototypes.push_back({MeterModbusTCPTableID::SAXPowerHomeBasicMode, Config::Object({
+        {"virtual_meter", Config::Enum(SAXPowerVirtualMeter::None)},
+        {"device_address", Config::Uint(64, 1, 247)},
+    })});
+
+    table_prototypes.push_back({MeterModbusTCPTableID::SAXPowerHomeExtendedMode, Config::Object({
+        {"virtual_meter", Config::Enum(SAXPowerVirtualMeter::None)},
+        {"device_address", Config::Uint(40, 1, 247)},
+    })});
+
+    table_prototypes.push_back({MeterModbusTCPTableID::E3DC, Config::Object({
+        {"virtual_meter", Config::Enum(E3DCVirtualMeter::None)},
+        {"device_address", Config::Uint(1, 1, 247)},
+    })});
+
+    table_prototypes.push_back({MeterModbusTCPTableID::HuaweiSUN2000, Config::Object({
+        {"virtual_meter", Config::Enum(HuaweiSUN2000VirtualMeter::None)},
         {"device_address", Config::Uint(1, 1, 247)},
     })});
 

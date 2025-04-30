@@ -89,7 +89,7 @@ static void print_alloc(int stage, const StageContext &sc) {
     logger.printfln("%s", buf);
 }
 
-static void trace_alloc(int stage, StageContext &sc) {
+static void trace_alloc(int stage, const StageContext &sc) {
 #if defined(BOARD_HAS_PSRAM)
     char buf[768] = {};
     trace("%d: raw(%d %d %d %d) min(%d %d %d %d) spread(%d %d %d %d) max_pv %d",
@@ -114,10 +114,15 @@ static void trace_alloc(int stage, StageContext &sc) {
     char *ptr = buf;
     ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "%d: ", stage);
     for(size_t i = 0; i < sc.charger_count; ++i) {
-        if (sc.phase_allocation[i] == 0 && sc.current_allocation[i] == 0 && stage != 0)
-            ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "[        %2zu        ]", i);
-        else
-            ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "[%2zu %5d@%dp       ]", i, sc.current_allocation[i], sc.phase_allocation[i]);
+        if (stage == 0) {
+            ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "[%2zu %dp %11s ]", i, sc.phase_allocation[i], ChargeMode::Strings[sc.charger_state[i].charge_mode]);
+        } else {
+            if (sc.phase_allocation[i] == 0 && sc.current_allocation[i] == 0)
+                ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "[        %2zu        ]", i);
+            else
+                ptr += snprintf(ptr, sizeof(buf) - (ptr - buf), "[%2zu %5d@%dp       ]", i, sc.current_allocation[i], sc.phase_allocation[i]);
+        }
+
         if (i % 8 == 7 && i != sc.charger_count - 1) {
             trace("%s", buf);
             ptr = buf;
@@ -218,7 +223,7 @@ Cost get_cost(int current_to_allocate,
 }
 
 // Checks stage-specific limits.
-bool cost_exceeds_limits(Cost cost, const CurrentLimits* limits, int stage, bool observe_pv_limit, uint32_t guaranteed_pv_current)
+bool cost_exceeds_limits(const Cost &cost, const CurrentLimits* limits, int stage, bool observe_pv_limit, uint32_t guaranteed_pv_current)
 {
     bool phases_exceeded = false;
     for (size_t i = (size_t)GridPhase::L1; i <= (size_t)GridPhase::L3; ++i) {
@@ -250,7 +255,7 @@ bool cost_exceeds_limits(Cost cost, const CurrentLimits* limits, int stage, bool
     }
 }
 
-void apply_cost(Cost cost, CurrentLimits* limits) {
+void apply_cost(const Cost &cost, CurrentLimits* limits) {
     limits->raw -= cost;
     limits->min -= cost;
     limits->spread -= cost;
@@ -730,7 +735,7 @@ static constexpr int CHECK_IMPROVEMENT = 4;
 static constexpr int CHECK_IMPROVEMENT_ALL_PHASE = 8;
 static constexpr int CHECK_SPREAD = 16;
 
-static bool can_activate(StringWriter &sw, Cost check_phase, const Cost new_cost, const Cost new_enable_cost, const Cost wnd_min, const Cost wnd_max, const CurrentLimits *limits, const CurrentAllocatorConfig *cfg, bool is_unknown_rotated_1p_3p_switch, uint16_t guaranteed_pv_current) {
+static bool can_activate(StringWriter &sw, const Cost &check_phase, const Cost &new_cost, const Cost &new_enable_cost, const Cost &wnd_min, const Cost &wnd_max, const CurrentLimits *limits, const CurrentAllocatorConfig *cfg, bool is_unknown_rotated_1p_3p_switch, uint16_t guaranteed_pv_current) {
     // Spread
     bool check_spread = ((check_phase.pv | check_phase.l1 | check_phase.l2 | check_phase.l3) & CHECK_SPREAD) != 0;
     bool check_improvement = ((check_phase.pv | check_phase.l1 | check_phase.l2 | check_phase.l3) & (CHECK_IMPROVEMENT | CHECK_IMPROVEMENT_ALL_PHASE)) != 0;
@@ -843,7 +848,7 @@ static int get_enable_cost(const ChargerState *state, bool activate_3p, bool hav
 // Activates the charger if possible.
 // Returns false if the charger can't be activated (see can_activate).
 // If true is returned, *spent is the cost that was spent to enable the charger.
-static bool try_activate(StringWriter &sw, const ChargerState *state, bool activate_3p, bool have_active_chargers, Cost *spent, const CurrentLimits *limits, const CurrentAllocatorConfig *cfg,const CurrentAllocatorState *ca_state) {
+static bool try_activate(StringWriter &sw, const ChargerState *state, bool activate_3p, bool have_active_chargers, Cost *spent, const CurrentLimits *limits, const CurrentAllocatorConfig *cfg, const CurrentAllocatorState *ca_state) {
     Cost wnd_min = ca_state->control_window_min;
     Cost wnd_max = ca_state->control_window_max;
 
@@ -972,21 +977,21 @@ static void stage_4(StageContext &sc) {
             phase_alloc = 1;
         }
 
-        // Only allow the first charger to be activated with the minimum current. Require the enable current now.
-        have_active_chargers = true;
-
         sc.phase_allocation[sc.idx_array[i]] = phase_alloc;
 
         sw.printf(" (%dp)", sc.phase_allocation[sc.idx_array[i]]);
         trace("%s", buf);
 
-        if (phase_alloc > 0)
+        if (phase_alloc > 0) {
+            // Only allow the first charger to be activated with the minimum current. Require the enable current now.
+            have_active_chargers = true;
             calculate_window(true, sc);
+        }
     }
 }
 
 // Stage 5: Switch 1p -> 3p if possible
-// - This is conceptionally similar to stage 3 except that chargers already have one phase allocated
+// - This is conceptionally similar to stage 4 except that chargers already have one phase allocated
 // - If there are still phases with a limit greater than the window maximum,
 //   switch chargers that have 1 phase allocated to 3 phases if possible
 // - Only chargers that _currently_ support the phase switch are considered
@@ -1010,6 +1015,9 @@ static void stage_5(StageContext &sc) {
     // - If there are more than one charger active, require the enable current on the PV phase.
     // - If there is only one charger active, this could be the one charger that is about to be switched to 3p.
     //   In that case require only the minimum current on the PV phase.
+    // check_pv_min does not have to be set to false after switching one charger to 3p:
+    // either it was already false, or there is no chargers active (then the loop does nothing)
+    // or there is exactly one charger active, then the loop only runs once.
     auto check_pv_min = active_chargers < 2 ? CHECK_MIN_WINDOW_MIN : CHECK_MIN_WINDOW_ENABLE;
 
     trace(check_pv_min ? "5: <2 active. pv reqs min" : "5: >1 active. pv reqs ena");
@@ -1134,7 +1142,7 @@ static int current_capacity(const CurrentLimits *limits, const ChargerState *sta
     return allocated_phases * capacity;
 }
 
-static Cost get_fair_current(int matched, int start, int *idx_array, uint8_t *phase_allocation, CurrentLimits *limits, const ChargerState *charger_state) {
+static Cost get_fair_current(int matched, int start, int *idx_array, uint8_t *phase_allocation, const CurrentLimits *limits, const ChargerState *charger_state) {
     Cost active_on_phase{0, 0, 0, 0};
     for (int i = start; i < matched; ++i) {
         const auto *state = &charger_state[idx_array[i]];
@@ -1562,6 +1570,7 @@ int allocate_current(
     };
 
     trace_alloc(0, sc);
+    trace("__all__");
     stage_1(sc);
     stage_2(sc);
     stage_3(sc);
@@ -1570,8 +1579,12 @@ int allocate_current(
     for (ChargeMode::Type mode = ChargeMode::_max; mode >= ChargeMode::Min; mode = (ChargeMode::Type)((int)mode >> 1)) {
         sc.charge_mode_filter = mode;
         // Run Min and PV as one mode.
-        if (mode == ChargeMode::Min)
+        if (mode == ChargeMode::Min) {
             sc.charge_mode_filter |= ChargeMode::PV;
+            trace("__only [Min,PV,Min+PV]__");
+        } else {
+            trace("__only %s__", ChargeMode::Strings[(size_t)mode]);
+        }
 
         stage_4(sc);
         stage_5(sc);
@@ -1580,6 +1593,7 @@ int allocate_current(
         stage_8(sc);
     }
 
+    trace("__all__");
     stage_9(sc);
     trace_alloc(9, sc);
     //logger.printfln("Took %u µs", end - start);
@@ -1608,6 +1622,8 @@ int allocate_current(
 
             }
 
+            // This detects a phase switch even if the charger is currently not activated:
+            // charger.phases is 1 or 3, never 0.
             if (charger.phases != phases_to_set && phases_to_set != 0) {
                 charger.last_phase_switch = now;
             }
@@ -1852,6 +1868,9 @@ bool update_from_client_packet(
 
     // If this charger just switched to state C (i.e. the contactor switched on)
     // set last_phase_switch to now to make sure we don't immediately switch again.
+    // The delay between the phase switch and the car requesting current again
+    // could be longer than the hysteresis. In that case we would be able to
+    // immediately phase switch again after switching to C, if we don't prevent this here.
     if (target.charger_state != v1->charger_state && v1->charger_state == 3)
         target.last_phase_switch = now_us();
 
@@ -1888,7 +1907,7 @@ bool update_from_client_packet(
         requested_current = std::min(requested_current, (uint16_t)max_phase_current);
     }
     if (abs((int)target.requested_current - (int)requested_current) > 1500) {
-        trace("RECV %d: requested %u -> %u mA (lines %.3f %.3f %.3f)", client_id, target.requested_current, requested_current, v1->line_currents[0], v1->line_currents[1], v1->line_currents[2]);
+        trace("RECV %d: requested %u -> %u mA (measured %.3fA %.3fA %.3fA)", client_id, target.requested_current, requested_current, v1->line_currents[0], v1->line_currents[1], v1->line_currents[2]);
     }
 
     target.requested_current = requested_current;

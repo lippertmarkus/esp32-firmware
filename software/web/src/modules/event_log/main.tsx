@@ -21,7 +21,6 @@ import * as util from "../../ts/util";
 import { h, Component } from "preact";
 import { __ } from "../../ts/translation";
 import { PageHeader } from "../../ts/components/page_header";
-import { FormRow } from "../../ts/components/form_row";
 import { Button, Spinner } from "react-bootstrap";
 import { SubPage } from "../../ts/components/sub_page";
 import { OutputTextarea } from "../../ts/components/output_textarea";
@@ -167,7 +166,7 @@ export class EventLog extends Component<{}, EventLogState> {
     }
 
     async download_debug_report() {
-        let timeout = window.setTimeout(() => this.setState({show_spinner: true}), 1000);
+        this.setState({show_spinner: true});
 
         try {
             let timestamp = new Date();
@@ -177,7 +176,8 @@ export class EventLog extends Component<{}, EventLogState> {
             debug_log += "\n\n";
             debug_log += this.state.log;
 
-            let trace_log = (await util.download("/trace_log", 20000).then(blob => blob.text())).replace(/\s+$/, "");
+            const trace_log_uri = "/trace_log" + (util.remoteAccessMode ? "/10020" : ""); // Use greedy level 20 compression to download the trace log when in remote access mode.
+            const trace_log = (await util.download(trace_log_uri, 20000).then(blob => blob.text())).replace(/\s+$/, "");
 
             if (trace_log.length > 0) {
                 debug_log += "\n\n___TRACE_LOG_START___\n\n";
@@ -200,7 +200,6 @@ export class EventLog extends Component<{}, EventLogState> {
         } catch (e) {
             util.add_alert("debug_report_load_failed", "danger", () => __("event_log.script.load_debug_report_error"), () => e.message)
         } finally {
-            window.clearTimeout(timeout);
             this.setState({show_spinner: false})
         }
     }

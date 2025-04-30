@@ -1,5 +1,6 @@
 /** @jsxImportSource preact */
 import { h } from "preact";
+import { removeUnicodeHacks } from "../../ts/translation";
 let x = {
     "modbus_tcp": {
         "navbar": {
@@ -7,16 +8,18 @@ let x = {
         },
         "content": {
             "disabled": "Deaktiviert",
-            "read_only": "Nur Lesezugriff",
+            "read_only": "Nur Lesezugriff (Fehler bei Schreibzugriff)",
+            "ignore_writes": "Nur Lesezugriff (Schreibzugriffe ignorieren)",
             "full_access": "Lese-/Schreibzugriff",
             "table": "Registertabelle",
             "warp": "WARP Charger",
             "bender_emulate": "Open Modbus Charge Control Interface (OMCCI); Kompatibel zu Bender CC613",
             "keba_emulate": "Kompatibel zu Keba P30 C-Series",
             "modbus_tcp": "Modbus/TCP",
-            "enable": "Modbus/TCP-Modus",
+            "enable": "Modbus/TCP-Server-Modus",
             "port": "Port",
             "port_muted": "typischerweise 502",
+            "debug": "Debug-Client",
             "table_docu": "WARP Register-Dokumentation",
             "table_content": <>
                 <thead class="thead-light">
@@ -205,7 +208,7 @@ let x = {
                         <td>weitere Stromzähler-Werte</td>
                         <td>float32 (85x)</td>
                         <td>all_values</td>
-                        <td>Siehe <a href="https://docs.warp-charger.com/docs/mqtt_http/api_reference/meter/#meter_all_values_any">API-Dokumentation</a></td>
+                        <td>Siehe <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/mqtt_http/api_reference/meter/#meter_all_values_any")}>API-Dokumentation</a></td>
                     </tr>
                     <tr>
                         <td>3100</td>

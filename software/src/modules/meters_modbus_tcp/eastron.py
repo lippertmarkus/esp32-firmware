@@ -2,6 +2,7 @@ specs = [
     {
         'name': 'Eastron SDM630 TCP',
         'register_type': 'InputRegister',
+        'start_address_offset': 1,
         'values': [
             {
                 'name': 'Phase 1 line to neutral volts [V]',
@@ -94,19 +95,19 @@ specs = [
                 'value_type': 'F32BE',
             },
             {
-                'name': 'Phase 1  power factor',
+                'name': 'Phase 1 power factor',
                 'value_id': 'PowerFactorL1Directional',
                 'start_address': 31,
                 'value_type': 'F32BE',
             },
             {
-                'name': 'Phase 2  power factor',
+                'name': 'Phase 2 power factor',
                 'value_id': 'PowerFactorL2Directional',
                 'start_address': 33,
                 'value_type': 'F32BE',
             },
             {
-                'name': 'Phase 3  power factor',
+                'name': 'Phase 3 power factor',
                 'value_id': 'PowerFactorL3Directional',
                 'start_address': 35,
                 'value_type': 'F32BE',
@@ -185,37 +186,37 @@ specs = [
             },
             {
                 'name': 'Import Wh since last reset [kWh]',
-                'value_id': 'EnergyActiveLSumImport', # FIXME: should be mapped resettable
+                'value_id': 'EnergyActiveLSumImport', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 73,
                 'value_type': 'F32BE',
             },
             {
                 'name': 'Export Wh since last reset [kWh]',
-                'value_id': 'EnergyActiveLSumExport', # FIXME: should be mapped resettable
+                'value_id': 'EnergyActiveLSumExport', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 75,
                 'value_type': 'F32BE',
             },
             {
                 'name': 'Import VArh since last reset [kvarh]',
-                'value_id': 'EnergyReactiveLSumInductive', # FIXME: should be mapped resettable
+                'value_id': 'EnergyReactiveLSumInductive', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 77,
                 'value_type': 'F32BE',
             },
             {
                 'name': 'Export VArh since last reset [kvarh]',
-                'value_id': 'EnergyReactiveLSumCapacitive', # FIXME: should be mapped resettable
+                'value_id': 'EnergyReactiveLSumCapacitive', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 79,
                 'value_type': 'F32BE',
             },
             {
                 'name': 'VAh since last reset [kVAh]',
-                'value_id': 'EnergyApparentLSumImExSum', # FIXME: should be mapped resettable
+                'value_id': 'EnergyApparentLSumImExSum', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 81,
                 'value_type': 'F32BE',
             },
             {
                 'name': 'Ah since last reset [Ah]',
-                'value_id': 'ElectricCharge', # FIXME: should be mapped resettable
+                'value_id': 'ElectricCharge', # FIXME: should be mapped resettable, but it's only resettable with an actual SDM630-TCP, not with a normal SDM630 behind an RS485/TCP converter
                 'start_address': 83,
                 'value_type': 'F32BE',
             },

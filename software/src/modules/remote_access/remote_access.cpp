@@ -198,6 +198,8 @@ void RemoteAccess::pre_setup()
         {"state", Config::Uint8(1)},
         {"user", Config::Uint8(255)},
         {"connection", Config::Uint8(255)},
+        // unix timestamp
+        {"last_state_change", Config::Uint53(0)},
     });
 
     connection_state =
@@ -974,6 +976,10 @@ void RemoteAccess::register_urls()
 
     task_scheduler.scheduleWithFixedDelay(
         [this]() {
+            timeval now;
+            if (!rtc.clock_synced(&now)) {
+                now.tv_sec = 0;
+            }
             for (size_t i = 0; i < MAX_KEYS_PER_USER; i++) {
                 uint32_t state = 1;
                 if (this->remote_connections[i].conn != nullptr) {
@@ -983,6 +989,7 @@ void RemoteAccess::register_urls()
                 if (this->connection_state.get(i + 1)->get("state")->updateUint(state)) { // 0 is the management connection
                     uint32_t conn = this->connection_state.get(i + 1)->get("connection")->asUint();
                     uint32_t user = this->connection_state.get(i + 1)->get("user")->asUint();
+                    this->connection_state.get(i + 1)->get("last_state_change")->updateUint53((uint64_t)now.tv_sec);
                     if (state == 2) {
                         logger.printfln("Connection %lu for user %lu connected", conn, user);
                     } else if (state == 1 && conn != 255 && user != 255) {
@@ -996,6 +1003,11 @@ void RemoteAccess::register_urls()
 
     task_scheduler.scheduleWithFixedDelay(
         [this]() {
+            timeval now;
+            if (!rtc.clock_synced(&now)) {
+                return;
+            }
+
             uint32_t state = 1;
             if (management != nullptr) {
                 state = management->is_peer_up(nullptr, nullptr) ? 2 : 1;
@@ -1015,6 +1027,7 @@ void RemoteAccess::register_urls()
             }
 
             if (this->connection_state.get(0)->get("state")->updateUint(state)) {
+                this->connection_state.get(0)->get("last_state_change")->updateUint53((uint64_t)now.tv_sec);
                 if (state == 2) {
                     logger.printfln("Management connection connected");
                 } else {
@@ -1100,7 +1113,7 @@ void RemoteAccess::run_request_with_next_stage(const char *url,
                     default:
                         if (strstr(url_capture.c_str(), "/management") != nullptr) {
                             if (!this->management_request_failed) {
-                                logger.printfln("Management request failed with internal error code %i", (int)event->error);
+                                logger.printfln("Management request failed with internal error: %s (%u)", translate_error(event), (uint8_t)event->error);
                                 this->management_request_failed = true;
                             }
                         } else {
@@ -1384,7 +1397,7 @@ void RemoteAccess::resolve_management()
         serializer.addMemberObject("data");
         serializer.addMemberObject("V1");
         serializer.addMemberNumber("port", network.get_web_server_port());
-        serializer.addMemberString("firmware_version", BUILD_VERSION_STRING);
+        serializer.addMemberString("firmware_version", build_version_full_str());
         serializer.addMemberArray("configured_connections");
         for (auto &user : config.get("users")) {
             uint32_t user_id = user.get("id")->asUint() - 1;
@@ -1402,7 +1415,7 @@ void RemoteAccess::resolve_management()
         serializer.addMemberString("id", config.get("uuid")->asEphemeralCStr());
         serializer.addMemberString("password", config.get("password")->asEphemeralCStr());
         serializer.addMemberNumber("port", network.get_web_server_port());
-        serializer.addMemberString("firmware_version", BUILD_VERSION_STRING);
+        serializer.addMemberString("firmware_version", build_version_full_str());
         serializer.addMemberArray("configured_users");
         for (auto &user : config.get("users")) {
             serializer.addObject();
@@ -1893,6 +1906,10 @@ void RemoteAccess::run_management()
 }
 
 void RemoteAccess::close_all_remote_connections() {
+    timeval now;
+    if (!rtc.clock_synced(&now)) {
+        now.tv_sec = 0;
+    }
     for (uint8_t i = 0; i < 5; i++) {
         if (remote_connections[i].conn != nullptr) {
             logger.printfln("Closing connection %lu for user %lu",
@@ -1904,6 +1921,7 @@ void RemoteAccess::close_all_remote_connections() {
             remote_connections[i].id = 255;
             connection_state.get(i + 1)->get("user")->updateUint(255);
             connection_state.get(i + 1)->get("connection")->updateUint(255);
+            connection_state.get(i + 1)->get("last_state_change")->updateUint53(now.tv_sec);
         }
     }
 }

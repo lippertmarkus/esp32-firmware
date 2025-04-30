@@ -1,7 +1,7 @@
 /** @jsxImportSource preact */
 import { h } from "preact";
 import { toLocaleFixed } from "../../ts/util";
-import { __ } from "../../ts/translation";
+import { __, removeUnicodeHacks } from "../../ts/translation";
 let x = {
     "power_manager": {
         "status": {
@@ -29,7 +29,7 @@ let x = {
 
             "header_excess_charging": "Photovoltaic Excess Charging",
             "enable_excess_charging": "Excess charging enabled",
-            "enable_excess_charging_muted": <><a href="{{{manual_url}}}">see manual for details</a></>,
+            "enable_excess_charging_help": <><p>The <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/tutorials/pv_excess_charging/")}>tutorial PV-excess-charging</a> helps configuring this.</p></>,
             "enable_excess_charging_desc": "Will adjust the power consumption of controlled chargers, depending on the power generation of a photovoltaic system and the charge mode.",
             "default_mode": "Default charging mode",
             "default_mode_muted": "will be used after reboot",
@@ -40,10 +40,8 @@ let x = {
             "meter_slot_grid_power_in_use_by_battery": "selected as battery storage power meter",
             "guaranteed_power": "Min + PV: Minimum charging power",
             "guaranteed_power_muted": "Charging power that is allowed to be drawn from the grid to charge vehicles.",
-            "target_power_from_grid": "Target grid power draw",
-            "target_power_from_grid_muted": "target grid draw for excess charging",
             "control_behavior": "Control behavior",
-            "control_behavior_muted": <><a href="{{{manual_url}}}">see manual for details</a></>,
+            "control_behavior_help": <><p>Defines the target grid draw. This allows to prioritizing a battery storage over charging an electric vehicle.</p></>,
             "target_power_n200": "Very conservative (− 200 W)",
             "target_power_n100": "Conservative (− 100 W)",
             "target_power_n50_with_battery_meter": "Slightly conservative (− 50 W)",

@@ -1,6 +1,6 @@
 /** @jsxImportSource preact */
 import { h } from "preact";
-import { __ } from "../../ts/translation";
+import { __, removeUnicodeHacks } from "../../ts/translation";
 let x = {
     "charge_manager": {
         "status": {
@@ -49,7 +49,16 @@ let x = {
             "charge_manager_settings": "Lastmanagement",
             "charge_manager_chargers": "Wallboxen",
             "enable_charge_manager": "Fremdsteuerung",
-            "enable_charge_manager_muted": <><a href="{{{manual_url}}}">siehe Betriebsanleitung für Details</a></>,
+            "enable_charge_manager_help": /*FFN*/(has_managed_mode: boolean) => <>
+                <p>Auf dieser Seite werden die kontrollierten Wallboxen konfiguriert. Die hier vorgenommenen Einstellungen beeinflussen das <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/tutorials/chargemanagement")}>Lastmanagement</a> zwischen den Wallboxen.</p>
+                <ul class="mb-0">
+                    <li><strong>Deaktiviert:</strong> Es findet kein Lastmanagement statt. {__("This_device")} ist vollständig eigenständig.</li>
+                    {has_managed_mode ?
+                        <li><strong>Fremdgesteuert:</strong> {__("This_device")} wird von einem anderen Lastmanager verwaltet. Es müssen keine weiteren Einstellungen vorgenommen werden.</li>
+                        : undefined}
+                    <li><strong>Lastmanager / PV-Überschussladen:</strong> {__("This_device")} arbeitet als Lastmanager. Dies ist auch der Fall, wenn sie nur eigenständig die Funktion <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/tutorials/pv_excess_charging/")}>PV-Überschussladen</a> ausführen soll. Es sind weitere Einstellungen vorzunehmen.</li>
+                </ul>
+            </>/*NF*/,
             "enable_watchdog": "Watchdog aktiviert",
             "enable_watchdog_muted": "nur bei API-Benutzung aktivieren (für den normalen Lastmanagement-Betrieb nicht notwendig!)",
             "enable_watchdog_desc": "Setzt den verfügbaren Strom auf die Voreinstellung, wenn er nicht spätestens alle 30 Sekunden aktualisiert wurde",
@@ -64,7 +73,7 @@ let x = {
             "minimum_current_auto_desc": "Minimaler Ladestrom wird abhängig vom gewählten Fahrzeugmodell eingestellt.",
             "minimum_current_vehicle_type": "Fahrzeugmodell",
             "minimum_current_vehicle_type_other": "Standard",
-            "minimum_current_vehicle_type_zoe": "Renault ZOE R135, ZOE R110 oder Twingo Z.E.",
+            "minimum_current_vehicle_type_zoe": "Renault ZOE R135, ZOE R110, Twingo Z.E. oder Smart ED/EQ",
             "minimum_current_1p": "Minimaler einphasiger Ladestrom",
             "minimum_current_1p_muted": "geringster Ladestrom, der vom Fahrzeug für einphasiges Laden unterstützt wird",
             "minimum_current_3p": "Minimaler dreiphasiger Ladestrom",
@@ -83,6 +92,7 @@ let x = {
             "table_charger_rotation": "Phasenrotation",
 
             "add_charger_title": "Wallbox hinzufügen",
+            "add_charger_invalid_feedback": "Es muss mindestens eine Wallbox konfiguriert werden.",
             "add_charger_name": "Anzeigename",
             "add_charger_host": "Hostname oder IP-Adresse",
             "add_charger_found": "Gefundene Wallboxen",

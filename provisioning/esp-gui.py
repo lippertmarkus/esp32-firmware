@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-from PyQt5.QtCore import QTimer
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QComboBox
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QComboBox
 
 from collections import namedtuple
 import functools
@@ -15,10 +15,10 @@ selected_firmware_type = ""
 Action = namedtuple("Action", "name pwd cmd show_filter_fn")
 
 actions = [
-    Action("ESP Parallel-Flash",          ".", "./provision_stage_0_{{{firmware_type}}}.sh",                                        lambda x: x != "warp3"),
-    Action("ESP Test",                    ".", "python3 -u provision_stage_1_{{{brick_type}}}.py {{{firmware_type}}}",              lambda x: x != "warp3"),
-    Action("ESP Print Label (Skip Test)", ".", "python3 -u provision_stage_1_{{{brick_type}}}.py {{{firmware_type}}} --skip-tests", lambda x: x != "warp3"),
-    Action("WARP ESP Flash and Test",     ".", "python3 -u provision_warp_esp32_ethernet_brick.py",                                 lambda x: x == "warp3")
+    Action("ESP Parallel-Flash",          ".", "lxterminal -e ./provision_stage_0_{{{firmware_type}}}.sh",                                        lambda x: x != "warp3"),
+    Action("ESP Test",                    ".", "lxterminal -e python3 -u provision_stage_1_{{{brick_type}}}.py {{{firmware_type}}}",              lambda x: x != "warp3"),
+    Action("ESP Print Label (Skip Test)", ".", "lxterminal -e python3 -u provision_stage_1_{{{brick_type}}}.py {{{firmware_type}}} --skip-tests", lambda x: x != "warp3"),
+    Action("WARP ESP Flash and Test",     ".", "venv/bin/python3 -u provision_warp_esp32_ethernet_brick.py",                        lambda x: x == "warp3")
 ]
 
 # use "with ChangedDirectory('/path/to/abc')" instead of "os.chdir('/path/to/abc')"
@@ -59,10 +59,12 @@ def work(q: queue.Queue, done_q: queue.Queue):
 
                 c = c.replace("{{{firmware_type}}}", selected_firmware_type)
                 c = c.replace("{{{brick_type}}}", brick_type)
-                sub_cmd = ["lxterminal", "-e"] + shlex.split(c)
+                result = subprocess.run(shlex.split(c), encoding='utf-8')
 
-                subprocess.check_output(sub_cmd)
-                done_q.put(btn)
+                if result.returncode == 42:
+                    q.put((a, btn))
+                else:
+                    done_q.put(btn)
 
 def run(a: Action, btn: QPushButton):
     btn.setDisabled(True)
@@ -126,7 +128,7 @@ def main():
 
     window.setLayout(layout)
     window.show()
-    app.exec_()
+    app.exec()
     work_queue.put(None)
     t.join()
 

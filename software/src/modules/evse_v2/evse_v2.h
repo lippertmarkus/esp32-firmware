@@ -59,7 +59,6 @@ public:
     void setup() override {}; // Override empty: Base method sets initialized to true, but we want EvseCommon to decide this.
     void register_urls() override {this->DeviceModule::register_urls();};
     void register_events() override;
-    void loop() override {this->DeviceModule::loop();};
 
 protected:
     // IEvseBackend implementation
@@ -118,6 +117,8 @@ public:
     uint16_t get_all_energy_meter_values(float *ret_values);
     bool reset_energy_meter_relative_energy();
     uint8_t get_energy_meter_type();
+
+    void set_charging_protocol(uint8_t charging_protocol, uint16_t cp_duty_cycle);
 
 private:
     ConfigRoot reset_dc_fault_current_state;

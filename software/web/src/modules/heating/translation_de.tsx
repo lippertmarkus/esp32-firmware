@@ -8,6 +8,13 @@ let x = {
         },
         "content": {
             "heating": "Heizung",
+            "override": "Aufheben",
+            "override_blocking": "Blockierenden Betrieb aufheben",
+            "discard_override": "Abbrechen",
+            "override_blocked_by_p14enwg": "Aufhebung durch §14a EnWG außer Kraft gesetzt",
+            "close_now": "Jetzt schließen",
+            "open_now": "Jetzt öffnen",
+            "toogle_now_failed": /*SFN*/(x: number) => `Konnte SG-Ready-Ausgang ${x} nicht umschalten`/*NF*/,
             "extended_logging": "Erweitertes Logging",
             "extended_logging_enabled": "Weiterführende Informationen zu den Steuerentscheidungen werden im Ereignis-Log angezeigt.",
             "extended_logging_description": "",
@@ -25,12 +32,14 @@ let x = {
             "input": "Eingang",
             "output": "Ausgang",
             "throttled_if_input": "Drosselung",
-            "closed": "Aktiv wenn geschlossen",
-            "opened": "Aktiv wenn geöffnet",
+            "output_active_closed": "Geschlossen, wenn aktiv",
+            "output_active_open": "Geöffnet, wenn aktiv",
+            "input_active_closed": "Aktiv, wenn geschlossen",
+            "input_active_open": "Aktiv, wenn geöffnet",
             "meter_slot_grid_power": "Stromzähler",
             "meter_slot_grid_power_muted": "typischerweise am Netzanschluss",
             "meter_slot_grid_power_none": "Kein Stromzähler konfiguriert",
-            "sg_ready": "SG Ready",
+            "sg_ready": "SG-Ready",
             "sg_ready_output": "SG-Ready-Ausgang",
             "sg_ready_output1_muted": "Ausgang 1 wird für den blockierenden Betrieb verwendet (SG-Ready-Zustand 1).",
             "sg_ready_output1_help": "Im blockierenden Betrieb läuft die Heizung nicht. Dieser Betriebszustand ist abwärtskompatibel zur häufig zu festen Uhrzeiten geschalteten EVU-Sperre.",
@@ -115,8 +124,7 @@ let x = {
             "control_period_muted": "Zeitraum in dem die günstigsten Stunden für den erweiterten und die teuersten Stunden für den blockierenden Betrieb bestimmt werden. Je besser die Speicherfähigkeit des Gebäudes, umso größer können die Zeiträume gewählt werden."
         },
         "script": {
-            "save_failed": "Speichern der Heizungseinstellungen fehlgeschlagen",
-            "reboot_content_changed": "Heizungseinstellungen"
+            "save_failed": "Speichern der Heizungseinstellungen fehlgeschlagen"
         }
     }
 }

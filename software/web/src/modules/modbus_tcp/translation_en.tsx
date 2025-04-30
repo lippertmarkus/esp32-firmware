@@ -1,5 +1,6 @@
 /** @jsxImportSource preact */
 import { h } from "preact";
+import { removeUnicodeHacks } from "../../ts/translation";
 let x = {
     "modbus_tcp": {
         "navbar": {
@@ -7,16 +8,18 @@ let x = {
         },
         "content": {
             "disabled": "Disabled",
-            "read_only": "Read access only",
+            "read_only": "Read access only (error on writes)",
+            "ignore_writes": "Read access only (ignore writes)",
             "full_access": "Read/write access",
             "table": "Register table",
             "warp": "WARP Charger",
             "bender_emulate": "Open Modbus Charge Control Interface (OMCCI); Bender CC613 compatible",
             "keba_emulate": "Keba P30 C-series compatible",
             "modbus_tcp": "Modbus/TCP",
-            "enable": "Modbus/TCP mode",
+            "enable": "Modbus/TCP server mode",
             "port": "Port",
             "port_muted": "typically 502",
+            "debug": "Debug client",
             "table_docu": "WARP register documentation",
             "table_content": <>
                 <thead class="thead-light">
@@ -203,7 +206,7 @@ let x = {
                         <td>More meter values</td>
                         <td>float32 (85x)</td>
                         <td>all_values</td>
-                        <td>See <a href="https://docs.warp-charger.com/docs/mqtt_http/api_reference/meter/#meter_all_values_any">API Documentation</a></td>
+                        <td>See <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/mqtt_http/api_reference/meter/#meter_all_values_any")}>API Documentation</a></td>
                     </tr>
                     <tr>
                         <td>3100</td>

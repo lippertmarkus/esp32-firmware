@@ -8,6 +8,13 @@ let x = {
         },
         "content": {
             "heating": "Heating",
+            "override": "Override",
+            "override_blocking": "Override blocking operation",
+            "discard_override": "Cancel",
+            "override_blocked_by_p14enwg": "Override suspended by §14a EnWG",
+            "close_now": "Close now",
+            "open_now": "Open now",
+            "toogle_now_failed": /*SFN*/(x: number) => `Could not toggle SG Ready output ${x}`/*NF*/,
             "extended_logging": "Extended logging",
             "extended_logging_enabled": "Extended logging enabled",
             "extended_logging_description": "More information about the control decisions in the event log",
@@ -25,8 +32,10 @@ let x = {
             "input": "Input",
             "output": "Output",
             "throttled_if_input": "Throttled if Input",
-            "closed": "Closed",
-            "opened": "Opened",
+            "output_active_closed": "Closed, if active",
+            "output_active_open": "Open, if active",
+            "input_active_closed": "Active, if closed",
+            "input_active_open": "Active, if open",
             "meter_slot_grid_power": "Power meter",
             "meter_slot_grid_power_muted": "typically at the grid connection",
             "meter_slot_grid_power_none": "No power meter configured",
@@ -114,8 +123,7 @@ let x = {
             "control_period_muted": "Period in which the cheapest hours for the extended and the most expensive hours for the blocking operation are determined. The better the storage capacity of the building, the larger the periods can be chosen."
         },
         "script": {
-            "save_failed": "Failed to save the heating settings",
-            "reboot_content_changed": "heating settings"
+            "save_failed": "Failed to save the heating settings"
         }
     }
 }

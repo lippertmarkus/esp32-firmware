@@ -19,7 +19,6 @@
 
 import { h, JSX, Context } from "preact";
 import { useId, useContext, useRef } from "preact/hooks";
-import { JSXInternal } from "preact/src/jsx";
 import { Button } from "react-bootstrap";
 import { Minus, Plus } from "react-feather";
 import { __ } from "../translation";
@@ -27,7 +26,7 @@ import { register_id_context_component_type } from "./form_row";
 
 import * as util from "../util";
 
-interface SwitchableInputNumberProps extends Omit<JSXInternal.HTMLAttributes<HTMLInputElement>, "class" | "id" | "type" | "onInput"> {
+interface SwitchableInputNumberProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "class" | "id" | "type" | "onInput"> {
     idContext?: Context<string>;
     value: number;
     onValue: (value: number) => void;
@@ -93,7 +92,7 @@ export function SwitchableInputNumber(props: SwitchableInputNumberProps) {
                 disabled={!props.checked || props.disabled}
             />
             <div class="input-group-append">
-                {props.unit ? <div class="form-control input-group-text">{this.props.unit}</div> : undefined}
+                {props.unit ? <div class="form-control input-group-text">{props.unit}</div> : undefined}
                 <Button variant="primary"
                         disabled={!props.checked || props.value == props.min || props.disabled}
                         className="form-control px-1"

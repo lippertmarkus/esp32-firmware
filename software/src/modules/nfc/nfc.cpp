@@ -22,7 +22,7 @@
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
 #include "bindings/errors.h"
-#include "tools.h"
+#include "tools/hexdump.h"
 #include "nfc_bricklet_firmware_bin.embedded.h"
 
 #if defined(BOARD_HAS_PSRAM)
@@ -81,7 +81,7 @@ void NFC::pre_setup()
             tags->get(tag)->get("tag_id")->updateString(id_copy);
 
             if (id_copy.length() != 0 && id_copy.length() % 3 != 2)
-                return "Tag ID has unexpected length. Expected format is hex bytes separated by colons. For example \"01:23:ab:3d\".";
+                return "Tag ID has unexpected length. Expected format is uppercase hex bytes separated by colons. For example \"01:23:AB:3D\".";
 
             for(int i = 0; i < id_copy.length(); ++i) {
                 char c = id_copy.charAt(i);
@@ -89,7 +89,13 @@ void NFC::pre_setup()
                     continue;
                 if (i % 3 == 2 && c == ':')
                     continue;
-                return "Tag ID contains unexpected character. Expected format is hex bytes separated by colons. For example \"01:23:ab:3d\".";
+                return "Tag ID contains unexpected character. Expected format is uppercase hex bytes separated by colons. For example \"01:23:AB:3D\".";
+            }
+
+            for (size_t tag2 = tag + 1; tag2 < tags->count(); ++tag2) {
+                if (tags->get(tag)->get("tag_id")->asString() == tags->get(tag2)->get("tag_id")->asString()) {
+                    return "Tag ID " + tags->get(tag)->get("tag_id")->asString() + " is used multiple times.";
+                }
             }
         }
 
@@ -132,7 +138,7 @@ void NFC::pre_setup()
         cfg.get("tag_id")->updateString(id_copy);
 
         if (id_copy.length() != 0 && id_copy.length() % 3 != 2)
-            return "Tag ID has unexpected length. Expected format is hex bytes separated by colons. For example \"01:23:ab:3d\".";
+            return "Tag ID has unexpected length. Expected format is uppercase hex bytes separated by colons. For example \"01:23:AB:3D\".";
 
         for(int i = 0; i < id_copy.length(); ++i) {
             char c = id_copy.charAt(i);
@@ -140,7 +146,7 @@ void NFC::pre_setup()
                 continue;
             if (i % 3 == 2 && c == ':')
                 continue;
-            return "Tag ID contains unexpected character. Expected format is hex bytes separated by colons. For example \"01:23:ab:3d\".";
+            return "Tag ID contains unexpected character. Expected format is uppercase hex bytes separated by colons. For example \"01:23:AB:3D\".";
         }
 
         return "";
@@ -227,7 +233,7 @@ void NFC::check_nfc_state()
         return;
     }
     if (mode != TF_NFC_MODE_SIMPLE) {
-        logger.printfln("NFC mode invalid. Did the bricklet reset?");
+        logger.printfln("NFC mode invalid. Did the Bricklet reset?");
         setup_nfc();
     }
 }
@@ -299,38 +305,20 @@ void NFC::tag_seen(tag_info_t *tag, bool injected)
 #endif
 }
 
-const char *lookup = "0123456789ABCDEF";
-
-void tag_id_bytes_to_string(const uint8_t *tag_id, uint8_t tag_id_len, char buf[NFC_TAG_ID_STRING_LENGTH + 1])
-{
-    for (int i = 0; i < tag_id_len; ++i) {
-        uint8_t b = tag_id[i];
-        uint8_t hi = (b & 0xF0) >> 4;
-        uint8_t lo = b & 0x0F;
-        buf[3 * i] = lookup[hi];
-        buf[3 * i + 1] = lookup[lo];
-        buf[3 * i + 2] = ':';
-    }
-    if (tag_id_len == 0)
-        buf[0] = '\0';
-    else
-        buf[3 * tag_id_len - 1] = '\0';
-}
-
 void NFC::update_seen_tags()
 {
     for (int i = 0; i < TAG_LIST_LENGTH - 1; ++i) {
-        uint8_t tag_id_bytes[10];
+        uint8_t tag_id_bytes[NFC_TAG_ID_LENGTH];
         uint8_t tag_id_len = 0;
         int result = tf_nfc_simple_get_tag_id(&device, i, &new_tags[i].tag_type, tag_id_bytes, &tag_id_len, &new_tags[i].last_seen);
         if (result != TF_E_OK) {
             if (!is_in_bootloader(result)) {
-                logger.printfln("Failed to get tag id %d, rc: %d", i, result);
+                logger.printfln("Failed to get tag ID %d, rc: %d", i, result);
             }
             continue;
         }
 
-        tag_id_bytes_to_string(tag_id_bytes, tag_id_len, new_tags[i].tag_id);
+        hexdump(tag_id_bytes, tag_id_len, new_tags[i].tag_id, ARRAY_SIZE(new_tags[i].tag_id), HexdumpCase::Upper, ':');
     }
 
     // The NFC bricklet removes tags after 24h. Do the same with injected tags.
@@ -469,11 +457,6 @@ void NFC::register_urls()
     }, true);
 
     this->DeviceModule::register_urls();
-}
-
-void NFC::loop()
-{
-    this->DeviceModule::loop();
 }
 
 #if MODULE_AUTOMATION_AVAILABLE()

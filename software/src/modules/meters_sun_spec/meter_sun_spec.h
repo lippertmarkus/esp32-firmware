@@ -64,11 +64,13 @@ private:
     void disconnect_callback() override;
 
     bool alloc_read_buffer(size_t model_regcount);
+    void trace_response();
     void read_start(size_t model_regcount);
 
     void scan_start_delay();
     void scan_start();
     void scan_read_delay();
+    void scan_next_base_address();
     void scan_next();
 
     uint32_t slot;
@@ -97,6 +99,8 @@ private:
 
     bool check_phase_voltages = false;
     uint32_t phase_voltage_index_cache[3];
+
+    micros_t last_successful_parse = 0_us;
 };
 
 #if defined(__GNUC__)

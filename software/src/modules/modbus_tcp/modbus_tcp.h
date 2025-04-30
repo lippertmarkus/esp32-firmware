@@ -26,10 +26,10 @@
 
 #include <TFTools/Option.h>
 
-class ModbusTcp final : public IModule
+class ModbusTCP final : public IModule
 {
 public:
-    ModbusTcp();
+    ModbusTCP();
     void pre_setup() override;
     void setup() override;
     void register_urls() override;
@@ -60,6 +60,7 @@ private:
     TFModbusTCPExceptionCode setBenderHoldingRegisters(uint16_t start_address, uint16_t data_count, uint16_t *data_values);
 
     ConfigRoot config;
+    ConfigRoot error_counters;
 
     bool started = false;
 

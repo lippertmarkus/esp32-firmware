@@ -19,7 +19,7 @@
 
 import { h, Context, Fragment } from "preact";
 import { useId, useContext, useRef } from "preact/hooks";
-import { JSXInternal } from "preact/src/jsx";
+import { JSX } from 'preact';
 import { Button } from "react-bootstrap";
 import { Minus, Plus } from "react-feather";
 import { __ } from "../translation";
@@ -27,17 +27,20 @@ import { register_id_context_component_type } from "./form_row";
 
 import * as util from "../util";
 
-interface InputNumberProps extends Omit<JSXInternal.HTMLAttributes<HTMLInputElement>,  "class" | "id" | "type" | "onInput"> {
+interface InputNumberProps extends Omit<JSX.InputHTMLAttributes<HTMLInputElement>, "class" | "id" | "type" | "onInput"> {
     idContext?: Context<string>;
     value: number;
     onValue?: (value: number) => void;
     unit?: string;
     invalidFeedback?: string;
     disabled?: boolean;
+    readonly?: boolean;
 }
 
 export function InputNumber(props: InputNumberProps) {
     const id = !props.idContext ? useId() : useContext(props.idContext);
+
+    delete props.idContext;
 
     const input = useRef<HTMLInputElement>();
     const value = parseInt(props.value?.toString(), 10);
@@ -76,10 +79,10 @@ export function InputNumber(props: InputNumberProps) {
                 readonly={props.onValue === undefined || props.readonly}
         />
         {props.unit || props.onValue ? <div class="input-group-append">
-            {props.unit ? <div class="form-control input-group-text">{this.props.unit}</div> : undefined}
+            {props.unit ? <div class="form-control input-group-text">{props.unit}</div> : undefined}
             {props.onValue ? <>
             <Button variant="primary"
-                    disabled={props.value == props.min || props.disabled}
+                    disabled={props.value == props.min || props.disabled || props.readonly}
                     className="form-control px-1"
                     style="margin-right: .125rem !important;"
                     onClick={() => {
@@ -95,7 +98,7 @@ export function InputNumber(props: InputNumberProps) {
                 <Minus/>
             </Button>
             <Button variant="primary"
-                    disabled={props.value == props.max || props.disabled}
+                    disabled={props.value == props.max || props.disabled || props.readonly}
                     className="form-control px-1 rounded-right"
                     onClick={() => {
                         if (util.hasValue(props.value) && !isNaN(props.value)) {

@@ -4,6 +4,15 @@ import { h } from "preact";
 import { __ } from "../../ts/translation";
 let x = {
     "remote_access": {
+        "status": {
+            "remote_access": "Remote Access",
+            "label_muted": /*SFN*/ (since: string) => `since ${since}`/*NF*/,
+            "since_start": "since reboot",
+            "connected": "Connected to server",
+            "connected_to_clients": /*SFN*/ (clients: number) => `${clients} client${clients == 1 ? '' : 's'} connected` /*NF*/,
+            "disconnected": "Disconnected",
+            "disabled": "Disabled"
+        },
         "navbar": {
             "remote_access": "Remote Access"
         },

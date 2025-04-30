@@ -21,8 +21,15 @@ export interface config {
 export interface state {
     sgr_blocking: boolean;
     sgr_extended: boolean;
-    p14ewng_enable: boolean;
+    p14enwg: boolean;
     next_update: number;
 }
 
 export interface reset_holding_time {}
+
+export interface sgr_blocking_override {
+    override_until: number;
+}
+
+export type toggle_sgr_blocking = {};
+export type toggle_sgr_extended = {};

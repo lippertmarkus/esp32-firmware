@@ -125,7 +125,7 @@ export function InputFloat(props: InputFloatProps | InputFloatReadonlyProps) {
                 if (e.key == 'Enter')
                     sendInFlight();
                }}
-               onfocusout={'onValue' in props ? () => sendInFlight() : undefined}
+               onFocusOut={'onValue' in props ? () => sendInFlight() : undefined}
                value={value}
                readonly={!('onValue' in props) || props.readonly}
                disabled={props.disabled}
@@ -136,7 +136,7 @@ export function InputFloat(props: InputFloatProps | InputFloatReadonlyProps) {
         <div class="input-group-append">
             {'unit' in props ?
                 <div class={"form-control input-group-text" + ('showMinMax' in props ? " d-none d-sm-block" : "")}>
-                    {this.props.unit}
+                    {props.unit}
                 </div>
                 : undefined
             }

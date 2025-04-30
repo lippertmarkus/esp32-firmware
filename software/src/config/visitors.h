@@ -77,6 +77,33 @@ struct default_validator {
         return "";
     }
 
+    String operator()(const Config::ConfInt52 &x) const
+    {
+        const auto *slot = x.getSlot();
+        const auto val = *x.getVal();
+
+        if (val < slot->min)
+            return String("Integer value ") + val + " was less than the allowed minimum of " + slot->min;
+        if (val > slot->max)
+            return String("Integer value ") + val + " was more than the allowed maximum of " + slot->max;
+        return "";
+    }
+
+    String operator()(const Config::ConfUint53 &x) const
+    {
+        const auto *slot = x.getSlot();
+        const auto val = *x.getVal();
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
+        if (val < slot->min)
+#pragma GCC diagnostic pop
+            return String("Unsigned integer value ") + val + " was less than the allowed minimum of " + slot->min;
+        if (val > slot->max)
+            return String("Unsigned integer value ") + val + " was more than the allowed maximum of " + slot->max;
+        return "";
+    }
+
     String operator()(const Config::ConfBool &x) const
     {
         return "";
@@ -147,6 +174,14 @@ struct to_json {
         insertHere.set(*x.getVal());
     }
     void operator()(const Config::ConfUint &x)
+    {
+        insertHere.set(*x.getVal());
+    }
+    void operator()(const Config::ConfInt52 &x)
+    {
+        insertHere.set(*x.getVal());
+    }
+    void operator()(const Config::ConfUint53 &x)
     {
         insertHere.set(*x.getVal());
     }
@@ -271,6 +306,9 @@ static size_t estimate_chars_per_int(int32_t v)
     return leading_zeros_to_char_count[__builtin_clz(static_cast<uint32_t>(v))] + sign;
 }
 
+static size_t estimate_chars_per_int64(  int64_t v) {return 21;}
+static size_t estimate_chars_per_uint64(uint64_t v) {return 20;}
+
 struct max_string_length_visitor {
     size_t operator()(const Config::ConfString &x)
     {
@@ -289,6 +327,15 @@ struct max_string_length_visitor {
     size_t operator()(const Config::ConfUint &x)
     {
         return estimate_chars_per_uint(x.getSlot()->max);
+    }
+    size_t operator()(const Config::ConfInt52 &x)
+    {
+        return max(estimate_chars_per_int64(x.getSlot()->max),
+                   estimate_chars_per_int64(x.getSlot()->min));
+    }
+    size_t operator()(const Config::ConfUint53 &x)
+    {
+        return estimate_chars_per_uint64(x.getSlot()->max);
     }
     size_t operator()(const Config::ConfBool &x)
     {
@@ -355,6 +402,14 @@ struct string_length_visitor {
     {
         return estimate_chars_per_uint(*x.getVal());
     }
+    size_t operator()(const Config::ConfInt52 &x)
+    {
+        return estimate_chars_per_int64(*x.getVal());
+    }
+    size_t operator()(const Config::ConfUint53 &x)
+    {
+        return estimate_chars_per_uint64(*x.getVal());
+    }
     size_t operator()(const Config::ConfBool &x)
     {
         return (*x.getVal()) ? 4 : 5;
@@ -410,6 +465,14 @@ struct json_length_visitor {
         return 0;
     }
     size_t operator()(const Config::ConfUint &x)
+    {
+        return 0;
+    }
+    size_t operator()(const Config::ConfInt52 &x)
+    {
+        return 0;
+    }
+    size_t operator()(const Config::ConfUint53 &x)
     {
         return 0;
     }
@@ -509,6 +572,30 @@ struct from_json {
 
         bool changed = *x.getVal() != json_node.as<uint32_t>();
         *x.getVal() = json_node.as<uint32_t>();
+        return {"", changed};
+    }
+    UpdateResult operator()(Config::ConfInt52 &x)
+    {
+        if (json_node.isNull())
+            return {permit_null_updates ? "" : "Null updates not permitted.", false};
+
+        if (!json_node.is<int64_t>())
+            return {"JSON node was not a signed integer.", false};
+
+        bool changed = *x.getVal() != json_node.as<int64_t>();
+        *x.getVal() = json_node.as<int64_t>();
+        return {"", changed};
+    }
+    UpdateResult operator()(Config::ConfUint53 &x)
+    {
+        if (json_node.isNull())
+            return {permit_null_updates ? "" : "Null updates not permitted.", false};
+
+        if (!json_node.is<uint64_t>())
+            return {"JSON node was not an unsigned integer.", false};
+
+        bool changed = *x.getVal() != json_node.as<uint64_t>();
+        *x.getVal() = json_node.as<uint64_t>();
         return {"", changed};
     }
     UpdateResult operator()(Config::ConfBool &x)
@@ -775,6 +862,40 @@ struct from_update {
         *x.getVal() = new_val;
         return {"", changed};
     }
+    UpdateResult operator()(Config::ConfInt52 &x)
+    {
+        if (Config::containsNull(update))
+            return {"", false};
+
+        const auto *update_val = update->get<int64_t>();
+        if (update_val == nullptr)
+            return {"ConfUpdate node was not a signed integer.", false};
+
+        bool changed = *x.getVal() != *update_val;
+        *x.getVal() = *update_val;
+        return {"", changed};
+    }
+    UpdateResult operator()(Config::ConfUint53 &x)
+    {
+        if (Config::containsNull(update))
+            return {"", false};
+
+        uint64_t new_val = 0;
+        const auto *update_val_uint = update->get<uint64_t>();
+        if (update_val_uint == nullptr) {
+            const auto *update_val_int = update->get<int64_t>();
+            if (update_val_int == nullptr || *update_val_int < 0)
+                return {"ConfUpdate node was not an unsigned integer.", false};
+
+            new_val = (uint64_t)*update_val_int;
+        } else {
+            new_val = *update_val_uint;
+        }
+
+        bool changed = *x.getVal() != new_val;
+        *x.getVal() = new_val;
+        return {"", changed};
+    }
     UpdateResult operator()(Config::ConfBool &x)
     {
         if (Config::containsNull(update))
@@ -928,6 +1049,14 @@ struct is_updated {
     {
         return 0;
     }
+    uint8_t operator()(const Config::ConfInt52 &x)
+    {
+        return 0;
+    }
+    uint8_t operator()(const Config::ConfUint53 &x)
+    {
+        return 0;
+    }
     uint8_t operator()(const Config::ConfBool &x)
     {
         return 0;
@@ -979,6 +1108,12 @@ struct set_updated_false {
     void operator()(Config::ConfUint &x)
     {
     }
+    void operator()(Config::ConfInt52 &x)
+    {
+    }
+    void operator()(Config::ConfUint53 &x)
+    {
+    }
     void operator()(Config::ConfBool &x)
     {
     }
@@ -1028,6 +1163,14 @@ struct to_owned {
     {
         return OwnedConfig{*x.getVal()};
     }
+    OwnedConfig operator()(const Config::ConfInt52 &x)
+    {
+        return OwnedConfig{*x.getVal()};
+    }
+    OwnedConfig operator()(const Config::ConfUint53 &x)
+    {
+        return OwnedConfig{*x.getVal()};
+    }
     OwnedConfig operator()(const Config::ConfBool &x)
     {
         return OwnedConfig{*x.getVal()};
@@ -1074,85 +1217,91 @@ struct to_owned {
 struct api_info {
     void operator()(const Config::ConfString &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"string\",\"val\":\"%s\",\"minChars\":%hu,\"maxChars\":%hu}", x.getSlot()->val.c_str(), x.getSlot()->minChars, x.getSlot()->maxChars);
+        sw.printf("{\"type\":\"string\",\"val\":\"%s\",\"minChars\":%hu,\"maxChars\":%hu}", x.getSlot()->val.c_str(), x.getSlot()->minChars, x.getSlot()->maxChars);
     }
     void operator()(const Config::ConfFloat &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"float\",\"val\":%f,\"min\":%f,\"max\":%f}", isnan(x.getVal()) ? 0.0f : x.getVal(), x.getMin(), x.getMax());
+        sw.printf("{\"type\":\"float\",\"val\":%f,\"min\":%f,\"max\":%f}", isnan(x.getVal()) ? 0.0f : x.getVal(), x.getMin(), x.getMax());
     }
     void operator()(const Config::ConfInt &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"int\",\"val\":%li,\"min\":%li,\"max\":%li}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
+        sw.printf("{\"type\":\"int\",\"val\":%li,\"min\":%li,\"max\":%li}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
     }
     void operator()(const Config::ConfUint &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"uint\",\"val\":%lu,\"min\":%lu,\"max\":%lu}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
+        sw.printf("{\"type\":\"uint\",\"val\":%lu,\"min\":%lu,\"max\":%lu}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
+    }
+    void operator()(const Config::ConfInt52 &x)
+    {
+        sw.printf("{\"type\":\"int64\",\"val\":%lli,\"min\":%lli,\"max\":%lli}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
+    }
+    void operator()(const Config::ConfUint53 &x)
+    {
+        sw.printf("{\"type\":\"uint64\",\"val\":%llu,\"min\":%llu,\"max\":%llu}", x.getSlot()->val, x.getSlot()->min, x.getSlot()->max);
     }
     void operator()(const Config::ConfBool &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"bool\",\"val\":%s}", x.value ? "true" : "false");
+        sw.printf("{\"type\":\"bool\",\"val\":%s}", x.value ? "true" : "false");
     }
     void operator()(const Config::ConfVariant::Empty &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"null\"}");
+        sw.printf("{\"type\":\"null\"}");
     }
     void operator()(const Config::ConfArray &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"array\",\"prototype\":");
-        Config::apply_visitor(api_info{buf, buf_size, written}, x.getSlot()->prototype->value);
-        written += snprintf_u(buf + written, buf_size - written, ",\"minElements\":%u,\"maxElements\":%u,\"variantType\":%d,\"content\":[", x.getSlot()->minElements, x.getSlot()->maxElements, x.getSlot()->variantType);
+        sw.printf("{\"type\":\"array\",\"prototype\":");
+        Config::apply_visitor(api_info{sw}, x.getSlot()->prototype->value);
+        sw.printf(",\"minElements\":%u,\"maxElements\":%u,\"variantType\":%d,\"content\":[", x.getSlot()->minElements, x.getSlot()->maxElements, x.getSlot()->variantType);
         bool first = true;
         for (const Config &c : *x.getVal()) {
             if (!first) {
-                written += snprintf_u(buf + written, buf_size - written, ",");
+                sw.printf(",");
             }
             first = false;
-            Config::apply_visitor(api_info{buf, buf_size, written}, c.value);
+            Config::apply_visitor(api_info{sw}, c.value);
         }
-        written += snprintf_u(buf + written, buf_size - written, "]}");
+        sw.printf("]}");
     }
     void operator()(const Config::ConfObject &x)
     {
         const auto *slot = x.getSlot();
         const auto size = slot->schema->length;
 
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"object\",\"length\":%u,\"entries\":[", size);
+        sw.printf("{\"type\":\"object\",\"length\":%u,\"entries\":[", size);
 
         bool first = true;
         for (size_t i = 0; i < size; ++i) {
             if (!first) {
-                written += snprintf_u(buf + written, buf_size - written, ",");
+                sw.printf(",");
             }
             first = false;
-            written += snprintf_u(buf + written, buf_size - written, "{\"key\":\"%.*s\",\"value\":", slot->schema->keys[i].length, slot->schema->keys[i].val);
-            Config::apply_visitor(api_info{buf, buf_size, written}, slot->values[i].value);
-            written += snprintf_u(buf + written, buf_size - written, "}");
+            sw.printf("{\"key\":\"%.*s\",\"value\":", slot->schema->keys[i].length, slot->schema->keys[i].val);
+            Config::apply_visitor(api_info{sw}, slot->values[i].value);
+            sw.printf("}");
         }
-        written += snprintf_u(buf + written, buf_size - written, "]}");
+        sw.printf("]}");
     }
     void operator()(const Config::ConfUnion &x)
     {
-        written += snprintf_u(buf + written, buf_size - written, "{\"type\":\"union\",\"tag\":%u,\"prototypes_len\":%u,\"prototypes\":[", x.getSlot()->tag, x.getSlot()->prototypes_len);
+        sw.printf("{\"type\":\"union\",\"tag\":%u,\"prototypes_len\":%u,\"prototypes\":[", x.getSlot()->tag, x.getSlot()->prototypes_len);
 
         bool first = true;
         for (size_t i = 0; i < x.getSlot()->prototypes_len; ++i) {
             if (!first) {
-                written += snprintf_u(buf + written, buf_size - written, ",");
+                sw.printf(",");
             }
             first = false;
-            written += snprintf_u(buf + written, buf_size - written, "{\"tag\": %u,\"value\":", x.getSlot()->prototypes[i].tag);
-            Config::apply_visitor(api_info{buf, buf_size, written}, x.getSlot()->prototypes[i].config.value);
-            written += snprintf_u(buf + written, buf_size - written, "}");
+            sw.printf("{\"tag\": %u,\"value\":", x.getSlot()->prototypes[i].tag);
+            Config::apply_visitor(api_info{sw}, x.getSlot()->prototypes[i].config.value);
+            sw.printf("}");
         }
-        written += snprintf_u(buf + written, buf_size - written, "],\"val\":");
+        sw.printf("],\"val\":");
 
         auto &value = x.getVal()->value;
-        Config::apply_visitor(api_info{buf, buf_size, written}, value);
-        written += snprintf_u(buf + written, buf_size - written, "}");
+        Config::apply_visitor(api_info{sw}, value);
+        sw.printf("}");
     }
 
-    char *buf;
-    size_t buf_size;
-    size_t &written;
+    StringWriter &sw;
 };
 #endif

@@ -1,6 +1,6 @@
 specs = [
     {
-        'name': 'Solaredge Inverter Battery',
+        'name': 'Solaredge Battery',
         'register_type': 'HoldingRegister',
         'start_address_offset': 0,
         'f32_negative_max_as_nan': True,
@@ -28,6 +28,7 @@ specs = [
                 'value_id': 'VALUE_ID_META',
                 'start_address': 0xE172,
                 'value_type': 'F32LE',
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Battery 1 Instantaneous Power [W]',
@@ -78,6 +79,7 @@ specs = [
                 'value_id': 'CurrentDCChaDisDiff',
                 'start_address': 0xE272,
                 'value_type': 'F32LE',
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Battery 2 Instantaneous Power [W]',

@@ -279,10 +279,24 @@ void Wifi::apply_soft_ap_config_and_start()
     gateway.fromString(ap_config_in_use.get("gateway")->asEphemeralCStr());
     subnet.fromString(ap_config_in_use.get("subnet")->asEphemeralCStr());
 
-    WiFi.softAP(ap_config_in_use.get("ssid")->asEphemeralCStr(),
-                ap_config_in_use.get("passphrase")->asEphemeralCStr(),
-                channel_to_use,
-                ap_config_in_use.get("hide_ssid")->asBool());
+    // AP must be enabled before the bandwidth can be set.
+    WiFi.enableAP(true);
+
+    if (!WiFi.AP.waitStatusBits(ESP_NETIF_STARTED_BIT, 1000)) {
+        logger.printfln("AP netif not started after 1s. Expect problems.");
+    }
+
+    // We don't need the additional speed of HT40 and it only causes more errors.
+    // Must be set directly after enabling the interface because it might clobber some other settings.
+    esp_err_t err = esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
+    if (err != ESP_OK) {
+        logger.printfln("Setting HT20 for AP failed: %s (%i)", esp_err_to_name(err), err);
+    }
+
+    WiFi.AP.create(ap_config_in_use.get("ssid")->asEphemeralCStr(),
+                   ap_config_in_use.get("passphrase")->asEphemeralCStr(),
+                   channel_to_use,
+                   ap_config_in_use.get("hide_ssid")->asBool());
 
     int ap_config_attempts = 0;
     do {
@@ -297,9 +311,13 @@ void Wifi::apply_soft_ap_config_and_start()
     if (ap_config_attempts != 1) {
         logger.printfln("Had to configure soft AP IP address %d times.", ap_config_attempts);
     }
+
+    String ap_bssid = WiFi.softAPmacAddress();
+    state.get("ap_bssid")->updateString(ap_bssid);
+
     logger.printfln("Soft AP started");
     logger.printfln_continue("SSID: %s", ap_config_in_use.get("ssid")->asEphemeralCStr());
-    logger.printfln_continue("MAC address: %s", WiFi.softAPmacAddress().c_str());
+    logger.printfln_continue("MAC address: %s", ap_bssid.c_str());
     logger.printfln_continue("IP address: %s", ip.toString().c_str());
 }
 
@@ -312,14 +330,16 @@ bool Wifi::apply_sta_config_and_connect()
     WiFi.persistent(false);
     WiFi.setAutoReconnect(false);
     WiFi.disconnect(false, true);
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
 
     const char *ssid = sta_config_in_use.get("ssid")->asEphemeralCStr();
+    const char *passphrase = sta_config_in_use.get("passphrase")->asEphemeralCStr();
+    const bool bssid_lock = sta_config_in_use.get("bssid_lock")->asBool();
 
     uint8_t bssid[6];
-    sta_config_in_use.get("bssid")->fillUint8Array(bssid, ARRAY_SIZE(bssid));
-
-    const char *passphrase = sta_config_in_use.get("passphrase")->asEphemeralCStr();
-    bool bssid_lock = sta_config_in_use.get("bssid_lock")->asBool();
+    if (bssid_lock) {
+        sta_config_in_use.get("bssid")->fillUint8Array(bssid, ARRAY_SIZE(bssid));
+    }
 
     IPAddress ip, subnet, gateway, dns, dns2;
 
@@ -335,14 +355,20 @@ bool Wifi::apply_sta_config_and_connect()
         WiFi.config((uint32_t)0, (uint32_t)0, (uint32_t)0);
     }
 
-    logger.printfln("Connecting to '%s'", ssid);
+    if (bssid_lock) {
+        logger.printfln("Connecting to '%s', locked to BSSID %02X:%02X:%02X:%02X:%02X:%02X", ssid, bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+    } else {
+        logger.printfln("Connecting to '%s'", ssid);
+    }
     EapConfigID eap_config_id = static_cast<EapConfigID>(sta_config_in_use.get("wpa_eap_config")->as<OwnedConfig::OwnedConfigUnion>()->tag);
     switch (eap_config_id) {
         case EapConfigID::None:
+            WiFi.setMinSecurity(WIFI_AUTH_WPA_WPA2_PSK);
             WiFi.begin(ssid, passphrase, 0, bssid_lock ? bssid : nullptr, true);
             break;
 
         case EapConfigID::TLS:
+            WiFi.setMinSecurity(WIFI_AUTH_WPA2_ENTERPRISE);
             WiFi.begin(ssid,
                     wpa2_auth_method_t::WPA2_AUTH_TLS,
                     eap_identity.c_str(),
@@ -367,6 +393,7 @@ bool Wifi::apply_sta_config_and_connect()
          * The user cert and key are unused because using them breaks it atm.
         */
         case EapConfigID::PEAP_TTLS:
+            WiFi.setMinSecurity(WIFI_AUTH_WPA2_ENTERPRISE);
             WiFi.begin(ssid,
                     wpa2_auth_method_t::WPA2_AUTH_PEAP,
                     eap_identity.c_str(),
@@ -513,13 +540,45 @@ void Wifi::setup()
         ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
     WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info) {
+            wifi_ap_record_t wifi_info;
+            if (esp_wifi_sta_get_ap_info(&wifi_info) != ESP_OK) {
+                logger.printfln("Connected to WiFi");
+            } else {
+                char buf[128];
+                StringWriter sw(buf, ARRAY_SIZE(buf));
+                sw.printf("'%s', ch.%hhu 11", reinterpret_cast<const char *>(wifi_info.ssid), wifi_info.primary);
+
+                if (wifi_info.phy_11a)       sw.printf("a");
+                if (wifi_info.phy_11b)       sw.printf("b");
+                if (wifi_info.phy_11g)       sw.printf("g");
+                if (wifi_info.phy_11n)       sw.printf("n");
+                if (wifi_info.phy_11ac)      sw.printf("+ac");
+                if (wifi_info.phy_11ax)      sw.printf("+ax");
+
+                if      (wifi_info.bandwidth == WIFI_BW_HT20)   sw.printf(" HT20");
+                else if (wifi_info.bandwidth == WIFI_BW_HT40)   sw.printf(" HT40");
+                else if (wifi_info.bandwidth == WIFI_BW80)      sw.printf(" VHT80");
+                else if (wifi_info.bandwidth == WIFI_BW160)     sw.printf(" VHT160");
+                else if (wifi_info.bandwidth == WIFI_BW80_BW80) sw.printf(" VHT80+80");
+
+                if (wifi_info.phy_lr)        sw.printf(" lr");
+                if (wifi_info.wps)           sw.printf(" WPS");
+                if (wifi_info.ftm_responder) sw.printf(" FTMr");
+                if (wifi_info.ftm_initiator) sw.printf(" FTMi");
+
+                sw.printf(" [%.3s] %hhidBm, BSSID %02X:%02X:%02X:%02X:%02X:%02X",
+                          wifi_info.country.cc,
+                          wifi_info.rssi,
+                          wifi_info.bssid[0], wifi_info.bssid[1], wifi_info.bssid[2], wifi_info.bssid[3], wifi_info.bssid[4], wifi_info.bssid[5]);
+
+                logger.printfln("Connected to %s", buf);
+            }
+
             this->was_connected = true;
+            this->last_connected = now_us();
 
-            logger.printfln("Connected to '%s', BSSID %s", WiFi.SSID().c_str(), WiFi.BSSIDstr().c_str());
-            last_connected = now_us();
-
-            uint32_t now_ms = last_connected.to<millis_t>().as<uint32_t>();
-            task_scheduler.scheduleOnce([this, now_ms](){
+            uint32_t now_ms = this->last_connected.to<millis_t>().as<uint32_t>();
+            task_scheduler.scheduleOnce([this, now_ms]() {
                 state.get("connection_start")->updateUint(now_ms);
             });
         },
@@ -617,14 +676,8 @@ void Wifi::setup()
     WiFi.setHostname((String(BUILD_HOST_PREFIX) + "-" + local_uid_str).c_str());
 #endif
 
-    if (enable_sta && enable_ap) {
-        WiFi.mode(WIFI_AP_STA);
-    } else if (enable_ap) {
-        WiFi.mode(WIFI_AP);
-    } else {
-        WiFi.mode(WIFI_STA);
-    }
-
+    // STA mode is always on so that we can scan for WiFis and the HWRNG has entropy.
+    WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(false);
 
     // Check if WiFi connected automatically and erase configuration in that case.
@@ -632,29 +685,22 @@ void Wifi::setup()
         WiFi.disconnect(false, true);
     }
 
+    // We don't need the additional speed of HT40 and it only causes more errors.
+    // Cannot be set in apply_sta_config_and_connect() and must be set directly after enabling station mode
+    // because it apparently clobbers some interface settings, including IGMP memberships.
+    esp_err_t err = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+    if (err != ESP_OK) {
+        logger.printfln("Setting HT20 for station failed: %s (%i)", esp_err_to_name(err), err);
+    }
+
     esp_wifi_set_country_code("DE", true);
     esp_wifi_set_ps(WIFI_PS_NONE);
 
-    // We don't need the additional speed of HT40 and it only causes more errors.
-    // Always disable on both interfaces but only print warnings for interfaces we care about.
-    esp_err_t err;
-    err = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
-    if (enable_sta && err != ESP_OK)
-        logger.printfln("Setting HT20 for station failed: %i", err);
-
-    err = esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
-    if (enable_ap && err != ESP_OK)
-        logger.printfln("Setting HT20 for AP failed: %i", err);
-
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
-
-    state.get("ap_bssid")->updateString(WiFi.softAPmacAddress());
+    // Request max TX power. The actual power will be limited by the country setting above.
+    WiFi.setTxPower(WIFI_POWER_21dBm);
 
     if (enable_ap && !ap_fallback_only) {
         apply_soft_ap_config_and_start();
-    } else {
-        LogSilencer ls;
-        WiFi.softAPdisconnect(true);
     }
 
     if (enable_ap) {

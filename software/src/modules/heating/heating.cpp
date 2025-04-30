@@ -67,6 +67,11 @@ void Heating::pre_setup()
         return "";
     }};
 
+    sgr_blocking_override = ConfigRoot{Config::Object({
+        // timestamp minutes.
+        {"override_until", Config::Uint32(0)},
+    })};
+
     state = Config::Object({
         {"sgr_blocking", Config::Bool(false)},
         {"sgr_extended", Config::Bool(false)},
@@ -89,6 +94,53 @@ void Heating::register_urls()
     api.addCommand("heating/reset_holding_time", Config::Null(), {}, [this](String &/*errmsg*/) {
         this->last_sg_ready_change = 0;
         this->update();
+    }, true);
+
+    // We dont want a persistent config since we dont want to save this across reboots.
+    // This is why the config is build manually here.
+    api.addState("heating/sgr_blocking_override", &sgr_blocking_override);
+    api.addCommand("heating/sgr_blocking_override_update", &sgr_blocking_override, {}, [this](String &/*errmsg*/) {
+        task_scheduler.cancel(this->override_task_id);
+        this->override_task_id = 0;
+
+        uint32_t override_until = sgr_blocking_override.get("override_until")->asUint();
+        uint32_t now = rtc.timestamp_minutes();
+
+        if (override_until <= now) {
+            return;
+        }
+
+        // Override the timeout to force sg_ready to switch instantly
+        this->last_sg_ready_change = 0;
+        this->update();
+
+        const millis_t timeout = millis_t((uint64_t)(override_until - now) * 1000 * 60);
+        this->override_task_id = task_scheduler.scheduleOnce([this]() {
+            this->sgr_blocking_override.get("override_until")->updateUint(0);
+            this->last_sg_ready_change = 0;
+            this->update();
+        }, timeout);
+    }, true);
+
+    api.addCommand("heating/toggle_sgr_blocking", Config::Null(), {}, [this](String &/*errmsg*/) {
+        const bool sg_ready_output_0 = em_v2.get_sg_ready_output(0);
+        em_v2.set_sg_ready_output(0, !sg_ready_output_0);
+        last_sg_ready_change = rtc.timestamp_minutes();
+        state.get("next_update")->updateUint(last_sg_ready_change + config.get("min_hold_time")->asUint());
+        state.get("sgr_blocking")->updateBool(!state.get("sgr_blocking")->asBool());
+    }, true);
+
+    api.addCommand("heating/toggle_sgr_extended", Config::Null(), {}, [this](String &errmsg) {
+        if (this->is_p14enwg_active()) {
+            errmsg = "Cannot toggle SG Ready output 2 when §14 EnWG is active.";
+            return;
+        }
+
+        const bool sg_ready_output_1 = em_v2.get_sg_ready_output(1);
+        em_v2.set_sg_ready_output(1, !sg_ready_output_1);
+        last_sg_ready_change = rtc.timestamp_minutes();
+        state.get("next_update")->updateUint(last_sg_ready_change + config.get("min_hold_time")->asUint());
+        state.get("sgr_extended")->updateBool(!state.get("sgr_extended")->asBool());
     }, true);
 
     task_scheduler.scheduleWallClock([this]() {
@@ -118,6 +170,7 @@ bool Heating::is_p14enwg_active()
 Heating::Status Heating::get_status()
 {
     const bool p14enwg            = config.get("p14enwg")->asBool();
+    const uint32_t p14enwg_input  = config.get("p14enwg_input")->asUint();
     const uint32_t p14enwg_type   = config.get("p14enwg_type")->asUint();
     const uint32_t sg_ready0_type = config.get("sgr_blocking_type")->asUint();
     const uint32_t sg_ready1_type = config.get("sgr_extended_type")->asUint();
@@ -125,7 +178,7 @@ Heating::Status Heating::get_status()
     const bool sg_ready_output_1  = em_v2.get_sg_ready_output(1);
     const bool sg_ready0_on       = sg_ready_output_0 == (sg_ready0_type == HEATING_SG_READY_ACTIVE_CLOSED);
     const bool sg_ready1_on       = sg_ready_output_1 == (sg_ready1_type == HEATING_SG_READY_ACTIVE_CLOSED);
-    const bool p14_enwg_on        = p14enwg && (sg_ready_output_0 == (p14enwg_type == HEATING_SG_READY_ACTIVE_CLOSED));
+    const bool p14_enwg_on        = p14enwg && (em_v2.get_input(p14enwg_input) == (p14enwg_type == 0));
 
     if(p14_enwg_on) {
         return Status::BlockingP14;
@@ -218,9 +271,11 @@ void Heating::update()
     if(!yield_forecast && !extended && !blocking && !pv_excess_control) {
         extended_logging("No control active.");
     } else {
-        const time_t now                      = time(NULL);
-        const struct tm *current_time         = localtime(&now);
-        const uint16_t minutes_since_midnight = current_time->tm_hour * 60 + current_time->tm_min;
+        const time_t now = time(NULL);
+        struct tm current_time;
+        localtime_r(&now, &current_time);
+
+        const uint16_t minutes_since_midnight = current_time.tm_hour * 60 + current_time.tm_min;
         if (minutes_since_midnight >= 24*60) {
             extended_logging("Too many minutes since midnight: %d.", minutes_since_midnight);
             return;
@@ -389,6 +444,18 @@ void Heating::update()
             em_v2.set_sg_ready_output(1, new_value);
             last_sg_ready_change = rtc.timestamp_minutes();
             state.get("next_update")->updateUint(last_sg_ready_change + config.get("min_hold_time")->asUint());
+        }
+    }
+
+    uint32_t override_until = sgr_blocking_override.get("override_until")->asUint();
+    if (override_until > 0) {
+        uint32_t now = rtc.timestamp_minutes();
+        if (now >= override_until) {
+            extended_logging("Override time is over. Resetting override.");
+            sgr_blocking_override.get("override_until")->updateUint(0);
+        } else {
+            extended_logging("Override time is active. Current time: %limin, override until: %limin.", now, override_until);
+            sg_ready0_on = false;
         }
     }
 

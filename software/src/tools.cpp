@@ -234,20 +234,17 @@ void led_blink(int8_t led_pin, int interval_ms, int blinks_per_interval, int off
     digitalWrite(led_pin, led);
 }
 
-uint16_t internet_checksum(const uint8_t *data, size_t length)
+uint16_t internet_checksum_u16(const uint16_t *data, size_t word_count)
 {
     uint32_t checksum = 0xffff;
 
-    for (size_t i = 0; i < length - 1; i += 2) {
-        uint16_t buf;
-        memcpy(&buf, data + i, 2);
-        checksum += buf;
+    for (size_t i = 0; i < word_count; i++) {
+        checksum += data[i];
     }
 
     uint32_t carry = checksum >> 16;
     checksum = (checksum & 0xFFFF) + carry;
-    checksum = ~checksum;
-    return checksum;
+    return ~checksum;
 }
 
 void trigger_reboot(const char *initiator, millis_t delay_ms)
@@ -421,16 +418,17 @@ error:
 time_t get_localtime_midnight_in_utc(time_t timestamp)
 {
     // Local time for timestamp
-    struct tm *tm  = localtime(&timestamp);
+    struct tm tm;
+    localtime_r(&timestamp, &tm);
 
     // Local time to today midnight
-    tm->tm_hour  =  0;
-    tm->tm_min   =  0;
-    tm->tm_sec   =  0;
-    tm->tm_isdst = -1; // isdst = -1 => let mktime figure out if DST is in effect
+    tm.tm_hour  =  0;
+    tm.tm_min   =  0;
+    tm.tm_sec   =  0;
+    tm.tm_isdst = -1; // isdst = -1 => let mktime figure out if DST is in effect
 
     // Return midnight in UTC
-    return mktime(tm);
+    return mktime(&tm);
 }
 
 Option<time_t> get_localtime_today_midnight_in_utc()

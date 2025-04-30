@@ -79,9 +79,9 @@ def get_changelog_version(name):
     if len(versions) == 0:
         raise Exception('No version found in {}'.format(path))
 
-    oldest_version = (str(versions[0][0]), str(versions[0][1]), str(versions[0][2]), str(versions[0][3]))
+    version_oldest = (str(versions[0][0]), str(versions[0][1]), str(versions[0][2]), str(versions[0][3]))
     version = (str(versions[-1][0]), str(versions[-1][1]), str(versions[-1][2]), str(versions[-1][3]))
-    return oldest_version, version
+    return version_oldest, version
 
 def write_firmware_info(display_name, major, minor, patch, beta, build_time):
     buf = bytearray([0xFF] * 4096)
@@ -354,7 +354,11 @@ let x = """
 TSX_ADDITIONAL_HEADER_LINES = [
     'import { toLocaleFixed } from "../../ts/util";',
     'import { __ } from "../../ts/translation";',
-    'import { __ } from "./src/ts/translation";'
+    'import { __ } from "./src/ts/translation";',
+    'import { removeUnicodeHacks } from "../../ts/translation";',
+    'import { removeUnicodeHacks } from "./src/ts/translation";',
+    'import { __, removeUnicodeHacks } from "../../ts/translation";',
+    'import { __, removeUnicodeHacks } from "./src/ts/translation";',
 ]
 
 TSX_LINE_COMMENT_PATTERN = re.compile(r'^[ \t]*//.*$', re.MULTILINE)
@@ -365,8 +369,8 @@ TSX_FUNCTION_PATTERN = re.compile(r'/\*[SF]FN\*/.*?/\*NF\*/', re.MULTILINE | re.
 TSX_FUNCTION_ARGS_PATTERN = re.compile(r'FN\*/\s*\(([^\)]*)\)', re.MULTILINE | re.DOTALL)
 
 TSX_JSON_REPLACEMENTS = [# Escape nested fragments in functions
-    ('<>', '___START_FRAGMENT___'),
-    ('</>', '___END_FRAGMENT___'),
+    ('<>', '***START_FRAGMENT***'),
+    ('</>', '***END_FRAGMENT***'),
 ]
 
 def tsx_to_json(match):
@@ -442,7 +446,7 @@ HYPHENATE_THRESHOLD = 9
 missing_hyphenations = {}
 
 def should_be_hyphenated(x):
-    return x not in allowed_missing and not x.startswith("___START_FRAGMENT___") and not x.endswith("___END_FRAGMENT___")
+    return x not in allowed_missing and not x.startswith("***START_FRAGMENT***") and not x.endswith("***END_FRAGMENT***")
 
 def hyphenate(s, key, lang):
     if '\u00AD' in s:
@@ -458,12 +462,12 @@ def hyphenate(s, key, lang):
     # "escape" them with a string that is probably not used in keys but does not form a word boundary: 'ÄÖÜÄÖÜ'
     s = re.sub(r'__\("([^"]+)"\)', lambda match: f'__("{match.group(1).replace(".", "ÄÖÜÄÖÜ")}")', s)
 
-    # Replace longest words first. This prevents replacing parts of longer words.
-    for word in sorted(re.split(r'\W+', s), key=lambda x: len(x), reverse=True):
+    def repl(m: re.Match):
+        word = m.group(0)
+
         for l, r in hyphenations:
             if word == l:
-                s = s.replace(l, r)
-                break
+                return r
         else:
             is_too_long = len(word) > HYPHENATE_THRESHOLD
             is_camel_case = re.search(r'[a-z][A-Z]', word) is not None
@@ -474,6 +478,9 @@ def hyphenate(s, key, lang):
 
                 if word not in missing_hyphenation:
                     missing_hyphenation.append(word)
+            return word
+
+    s = re.sub(r'\w+', repl, s)
 
     # Reverse escaping of translation keys.
     s = re.sub(r'__\("([^"]+)"\)', lambda match: f'__("{match.group(1).replace("ÄÖÜÄÖÜ", ".")}")', s)
@@ -594,9 +601,11 @@ def main():
 
     manual_url = env.GetProjectOption("custom_manual_url")
     apidoc_url = env.GetProjectOption("custom_apidoc_url")
+    doc_base_url = env.GetProjectOption("custom_doc_base_url")
     firmware_url = env.GetProjectOption("custom_firmware_url")
     firmware_update_url = env.GetProjectOption("custom_firmware_update_url")
     remote_access_host = env.GetProjectOption("custom_remote_access_host")
+    support_email = env.GetProjectOption("custom_support_email")
     day_ahead_price_api_url = env.GetProjectOption("custom_day_ahead_price_api_url")
     solar_forecast_api_url = env.GetProjectOption("custom_solar_forecast_api_url")
     require_firmware_info = env.GetProjectOption("custom_require_firmware_info")
@@ -649,7 +658,7 @@ def main():
             dirty_suffix = '_' + git_commit_id + "_" + branch_name.replace("_", "-")
 
     try:
-        oldest_version, version = get_changelog_version(name)
+        version_oldest, version = get_changelog_version(name)
     except Exception as e:
         print('Error: Could not get changelog version: {0}'.format(e))
         sys.exit(1)
@@ -732,10 +741,10 @@ def main():
     build_lines = []
     build_lines.append('#pragma once')
     build_lines.append('#include <stdint.h>')
-    build_lines.append('#define OLDEST_VERSION_MAJOR {}'.format(oldest_version[0]))
-    build_lines.append('#define OLDEST_VERSION_MINOR {}'.format(oldest_version[1]))
-    build_lines.append('#define OLDEST_VERSION_PATCH {}'.format(oldest_version[2]))
-    build_lines.append('#define OLDEST_VERSION_BETA {}'.format(oldest_version[3]))
+    build_lines.append('#define BUILD_VERSION_OLDEST_MAJOR {}'.format(version_oldest[0]))
+    build_lines.append('#define BUILD_VERSION_OLDEST_MINOR {}'.format(version_oldest[1]))
+    build_lines.append('#define BUILD_VERSION_OLDEST_PATCH {}'.format(version_oldest[2]))
+    build_lines.append('#define BUILD_VERSION_OLDEST_BETA {}'.format(version_oldest[3]))
     build_lines.append('#define BUILD_VERSION_MAJOR {}'.format(version[0]))
     build_lines.append('#define BUILD_VERSION_MINOR {}'.format(version[1]))
     build_lines.append('#define BUILD_VERSION_PATCH {}'.format(version[2]))
@@ -772,6 +781,15 @@ def main():
     build_lines.append('const char *build_info_str();')
     build_lines.append('const char *build_filename_str();')
     build_lines.append('const char *build_commit_id_str();')
+    build_lines.append('#define BUILD_CUSTOM_APP_DESC_MAGIC 0xBCDE6543')
+    build_lines.append('#define BUILD_CUSTOM_APP_DESC_VERSION 1')
+    build_lines.append('typedef struct {')
+    build_lines.append('    uint32_t magic; // CUSTOM_APP_DESC_MAGIC')
+    build_lines.append('    uint8_t version; // BUILD_CUSTOM_APP_DESC_VERSION')
+    build_lines.append('    uint8_t padding[3];')
+    build_lines.append('    uint8_t fw_version[4]; // major, minor, patch, beta')
+    build_lines.append('    uint32_t fw_build_time;')
+    build_lines.append('} build_custom_app_desc_t;')
     tfutil.write_file_if_different(os.path.join('src', 'build.h'), '\n'.join(build_lines))
 
     firmware_basename = '{}_firmware{}{}{}_{}_{:x}{}'.format(
@@ -795,6 +813,19 @@ def main():
     build_lines.append('const char *build_info_str() {{ return "git url: {}, git branch: {}, git commit id: {}"; }}'.format(git_url, branch_name, git_commit_id))
     build_lines.append('const char *build_filename_str() {{ return "{}"; }}'.format(firmware_basename))
     build_lines.append('const char *build_commit_id_str() {{ return "{}"; }}'.format(git_commit_id))
+    build_lines.append('static_assert(sizeof(build_custom_app_desc_t) == 16, "build_custom_app_desc_t has wrong size");')
+    build_lines.append('extern const __attribute__((section(".rodata_custom_desc"))) build_custom_app_desc_t build_custom_app_desc = {')
+    build_lines.append('    BUILD_CUSTOM_APP_DESC_MAGIC,')
+    build_lines.append('    BUILD_CUSTOM_APP_DESC_VERSION,')
+    build_lines.append('    {0, 0, 0},')
+    build_lines.append('    {')
+    build_lines.append('        BUILD_VERSION_MAJOR,')
+    build_lines.append('        BUILD_VERSION_MINOR,')
+    build_lines.append('        BUILD_VERSION_PATCH,')
+    build_lines.append('        BUILD_VERSION_BETA,')
+    build_lines.append('    },')
+    build_lines.append('    {},'.format(timestamp))
+    build_lines.append('};')
     tfutil.write_file_if_different(os.path.join('src', 'build.cpp'), '\n'.join(build_lines))
     del build_lines
 
@@ -1154,8 +1185,10 @@ def main():
     translation_data = json.dumps(translation, indent=4, ensure_ascii=False)
     translation_data = translation_data.replace('{{{display_name}}}', display_name)
     translation_data = translation_data.replace('{{{manual_url}}}', manual_url)
+    translation_data = translation_data.replace('{{{doc_base_url}}}', doc_base_url)
     translation_data = translation_data.replace('{{{apidoc_url}}}', apidoc_url)
     translation_data = translation_data.replace('{{{firmware_url}}}', firmware_url)
+    translation_data = translation_data.replace('{{{support_email}}}', support_email)
     tfutil.write_file_if_different(os.path.join('web', 'src', 'ts', 'translation.json'), translation_data)
     del translation_data
 
@@ -1253,7 +1286,7 @@ def main():
             if isinstance(value, dict):
                 output += format_translation(language, value, type_only, indent + '    ')
             else:
-                is_fragment = value.startswith("___START_FRAGMENT___") and value.endswith("___END_FRAGMENT___")
+                is_fragment = value.startswith("***START_FRAGMENT***") and value.endswith("***END_FRAGMENT***")
                 is_string_function = value.startswith("/*SFN*/") and value.endswith("/*NF*/")
                 is_fragment_function = value.startswith("/*FFN*/") and value.endswith("/*NF*/")
                 is_string = not is_fragment and not is_string_function and not is_fragment_function
@@ -1283,8 +1316,10 @@ def main():
                     if '{{{' in string:
                         string = string.replace('{{{display_name}}}', display_name)
                         string = string.replace('{{{manual_url}}}', manual_url)
+                        string = string.replace('{{{doc_base_url}}}', doc_base_url)
                         string = string.replace('{{{apidoc_url}}}', apidoc_url)
                         string = string.replace('{{{firmware_url}}}', firmware_url)
+                        string = string.replace('{{{support_email}}}', support_email)
 
                     subtranslation[key] = string
 

@@ -67,7 +67,7 @@ export class WifiAP extends ConfigComponent<'wifi/ap_config', {}, WifiAPState> {
                             onSave={this.save}
                             onReset={this.reset}
                             onDirtyChange={this.setDirty}>
-                    <FormRow label={__("wifi.content.ap_enable")} label_muted={__("wifi.content.ap_enable_muted")}>
+                    <FormRow label={__("wifi.content.ap_enable")} help={__("wifi.content.ap_enable_help")}>
                         <InputSelect
                             value={
                                 (state.enable_ap && state.ap_fallback_only) ? 1 :
@@ -94,7 +94,7 @@ export class WifiAP extends ConfigComponent<'wifi/ap_config', {}, WifiAPState> {
                     </FormRow>
 
                     <FormRow label={__("wifi.content.ap_hide_ssid")}>
-                        <Switch desc={__("wifi.content.ap_hide_ssid_desc")((API.get("wifi/state")?.ap_bssid ?? " "))}
+                        <Switch desc={__("wifi.content.ap_hide_ssid_desc")}
                                 checked={state.hide_ssid}
                                 onClick={this.toggle("hide_ssid")}
                         />

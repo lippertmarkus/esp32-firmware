@@ -76,7 +76,9 @@ static void malloc_failed_hook(size_t size, uint32_t caps, const char *function_
     }
 }
 
-static void (*const slot_debug_info_fns[7])(SlotDebugInfo *slot_info) = {
+static constexpr int CONFIG_TYPES = 9;
+
+static void (*const slot_debug_info_fns[CONFIG_TYPES])(SlotDebugInfo *slot_info) = {
     &get_slot_debug_info<Config::ConfUint>,
     &get_slot_debug_info<Config::ConfInt>,
     &get_slot_debug_info<Config::ConfFloat>,
@@ -84,6 +86,8 @@ static void (*const slot_debug_info_fns[7])(SlotDebugInfo *slot_info) = {
     &get_slot_debug_info<Config::ConfArray>,
     &get_slot_debug_info<Config::ConfObject>,
     &get_slot_debug_info<Config::ConfUnion>,
+    &get_slot_debug_info<Config::ConfUint53>,
+    &get_slot_debug_info<Config::ConfInt52>,
 };
 
 void Debug::pre_setup()
@@ -166,6 +170,8 @@ void Debug::pre_setup()
         {"conf_array_buf_size", Config::Uint32(0)},
         {"conf_object_buf_size", Config::Uint32(0)},
         {"conf_union_buf_size", Config::Uint32(0)},
+        {"conf_uint53_buf_size", Config::Uint32(0)},
+        {"conf_int52_buf_size", Config::Uint32(0)},
     });
 
     state_slots_prototype = Config::Array({},
@@ -175,10 +181,10 @@ void Debug::pre_setup()
 
     state_slots = Config::Array({},
         &state_slots_prototype,
-        7, 7, Config::type_id<Config::ConfArray>()
+        CONFIG_TYPES, CONFIG_TYPES, Config::type_id<Config::ConfArray>()
     );
 
-    for (size_t i = 0; i < 7; i++) {
+    for (size_t i = 0; i < CONFIG_TYPES; i++) {
         state_slots.add();
         for (size_t j = 0; j < 5; j++) {
             // add() can trigger a move of ConfObjects, so get() must be called inside the loop.
@@ -243,8 +249,10 @@ void Debug::setup()
         state_slow.get("conf_array_buf_size" )->updateUint(get_allocated_slot_memory<Config::ConfArray>());
         state_slow.get("conf_object_buf_size")->updateUint(get_allocated_slot_memory<Config::ConfObject>());
         state_slow.get("conf_union_buf_size" )->updateUint(get_allocated_slot_memory<Config::ConfUnion>());
+        state_slow.get("conf_uint53_buf_size")->updateUint(get_allocated_slot_memory<Config::ConfUint53>());
+        state_slow.get("conf_int52_buf_size" )->updateUint(get_allocated_slot_memory<Config::ConfInt52>());
 
-        for (size_t i = 0; i < 7; i++) {
+        for (size_t i = 0; i < CONFIG_TYPES; i++) {
             SlotDebugInfo slot_info;
             slot_debug_info_fns[i](&slot_info);
             auto arr = state_slots.get(i);
@@ -298,38 +306,41 @@ void Debug::setup()
 
 #ifdef DEBUG_FS_ENABLE
 const char * const fs_browser_header = "<script>"
+"if (!window.location.toString().endsWith('/')) {"
+    "window.location = window.location + '/';"
+"}"
 "async function uploadFile() {"
     "let file = document.getElementById('upload').files[0];"
-    "await fetch(window.location +(window.location.toString().endsWith('/') ? '' : '/') + file.name, {"
+    "await fetch(window.location + (window.location.toString().endsWith('/') ? '' : '/') + file.name, {"
         "method: 'PUT',"
         "credentials: 'same-origin',"
         "body: file"
     "});"
-    "window.location.reload(true);"
+    "window.location.reload();"
 "}"
 "async function createFile() {"
     "let filename = document.getElementById('newFileName').value;"
     "let content = document.getElementById('newFileContent').value;"
-    "await fetch(window.location + filename, {"
+    "await fetch(window.location + (window.location.toString().endsWith('/') ? '' : '/') + filename, {"
         "method: 'PUT',"
         "credentials: 'same-origin',"
         "body: content"
     "});"
-    "window.location.reload(true);"
+    "window.location.reload();"
 "}"
 "async function createDirectory() {"
     "let dirname = document.getElementById('dirname').value;"
-    "await fetch(window.location + dirname + (dirname.endsWith('/') ? '' : '/'), {"
+    "await fetch(window.location + (window.location.toString().endsWith('/') ? '' : '/') + dirname + (dirname.endsWith('/') ? '' : '/'), {"
         "method: 'PUT',"
         "credentials: 'same-origin'"
     "});"
-    "window.location.reload(true);"
+    "window.location.reload();"
 "}"
 "async function deleteFile(name) {"
     "if (!window.confirm('Delete file ' + name + ' ?'))"
         "return;"
-    "await fetch('/debug/fs' + name, {method: 'DELETE'});"
-    "window.location.reload(true);"
+    "await fetch(window.location + name, {method: 'DELETE'});"
+    "window.location.reload();"
 "}"
 "</script>";
 
@@ -361,6 +372,102 @@ const char * const fs_browser_footer =
     "<br>"
     "<button type=button onClick=createFile()>Create file</button>"
 "</div>";
+
+
+static WebServerRequestReturnProtect browse_get(WebServerRequest request, String path) {
+    if (path.length() > 1 && path[path.length() - 1] == '/')
+        path = path.substring(0, path.length() - 1);
+
+    if (!LittleFS.exists(path))
+        return request.send(404, "text/plain", ("File " + path + " not found").c_str());
+
+    File f = LittleFS.open(path);
+    if (!f.isDirectory()) {
+        char buf[256];
+        request.beginChunkedResponse(200);
+        while (f.available()) {
+            size_t read = f.read(reinterpret_cast<uint8_t *>(buf), ARRAY_SIZE(buf));
+            request.sendChunk(buf, static_cast<ssize_t>(read));
+        }
+        return request.endChunkedResponse();
+    } else {
+        request.beginChunkedResponse(200, "text/html; charset=utf-8");
+        request.sendChunk(fs_browser_header, strlen(fs_browser_header));
+        String header = "<h1>" + String(f.path()) + "</h1><br>\n";
+        request.sendChunk(header.c_str(), static_cast<ssize_t>(header.length()));
+
+        if (path.length() > 1) {
+            String up = "<button type=button onclick=\"\" style=\"visibility: hidden;\">Delete</button>&nbsp;&nbsp;&nbsp;<a href='..'>..</a><br>\n";
+
+            request.sendChunk(up.c_str(), static_cast<ssize_t>(up.length()));
+        }
+
+        File file = f.openNextFile();
+        while(file) {
+            String s = "<button type=button onclick=\"deleteFile('/" + String(file.name()) + "')\">Delete</button>&nbsp;&nbsp;&nbsp;<a href=" + String(file.name()) + (file.isDirectory() ? "/" : "") + ">"+ file.name() + (file.isDirectory() ? "/" : "") +"</a><br>\n";
+            request.sendChunk(s.c_str(), static_cast<ssize_t>(s.length()));
+            file = f.openNextFile();
+        }
+
+        request.sendChunk(fs_browser_footer, strlen(fs_browser_footer));
+
+        return request.endChunkedResponse();
+    }
+}
+
+static WebServerRequestReturnProtect browse_delete(WebServerRequest request, String path) {
+    if (path.length() > 1 && path[path.length() - 1] == '/')
+        path = path.substring(0, path.length() - 1);
+
+    if (!LittleFS.exists(path))
+        return request.send(404, "text/plain", ("File " + path + " not found").c_str());
+
+    File f = LittleFS.open(path);
+    if (!f.isDirectory()) {
+        f.close();
+        LittleFS.remove(path);
+        return request.send(200, "text/plain", ("File " + path + " deleted").c_str());
+    } else {
+        f.close();
+        remove_directory(path.c_str());
+        return request.send(200, "text/plain", ("Directory " + path + " and all contents deleted").c_str());
+    }
+}
+
+static WebServerRequestReturnProtect browse_put(WebServerRequest request, String path) {
+    bool create_directory = path.length() > 1 && path[path.length() - 1] == '/';
+    if (create_directory)
+        path = path.substring(0, path.length() - 1);
+
+    if (LittleFS.exists(path)) {
+        File f = LittleFS.open(path);
+        if (!f.isDirectory() && create_directory)
+            return request.send(400, "text/plain", ("File " + path + " already exists and is not a directory").c_str());
+        if (f.isDirectory() && !create_directory)
+            return request.send(400, "text/plain", ("Directory " + path + " already exists").c_str());
+        if (f.isDirectory())
+            return request.send(200, "text/plain", ("Directory " + path + " already exists").c_str());
+        else {
+            f.close();
+            LittleFS.remove(path);
+        }
+    }
+
+    if (create_directory) {
+        LittleFS.mkdir(path);
+        return request.send(200, "text/plain", ("Directory " + path + " created").c_str());
+    }
+
+    File f = LittleFS.open(path, "w");
+
+    auto size = request.contentLength();
+    auto payload = heap_alloc_array<char>(size);
+    if (request.receive(payload.get(), size) < 0)
+        return request.send(500, "text/plain", "failed to receive");
+
+    f.write(reinterpret_cast<uint8_t *>(payload.get()), size);
+    return request.send(200, "text/plain", ("File " + path + " created.").c_str());
+}
 #endif
 
 void Debug::register_urls()
@@ -398,101 +505,32 @@ void Debug::register_urls()
 
     server.on_HTTPThread("/debug/fs/*", HTTP_GET, [this](WebServerRequest request) {
         String path = request.uri().substring(ARRAY_SIZE("/debug/fs") - 1);
-        if (path.length() > 1 && path[path.length() - 1] == '/')
-            path = path.substring(0, path.length() - 1);
 
-        if (!LittleFS.exists(path))
-            return request.send(404, "text/plain", ("File " + path + " not found").c_str());
-
-        File f = LittleFS.open(path);
-        if (!f.isDirectory()) {
-            char buf[256];
-            request.beginChunkedResponse(200);
-            while (f.available()) {
-                size_t read = f.read(reinterpret_cast<uint8_t *>(buf), ARRAY_SIZE(buf));
-                request.sendChunk(buf, static_cast<ssize_t>(read));
-            }
-            return request.endChunkedResponse();
-        } else {
-            request.beginChunkedResponse(200, "text/html; charset=utf-8");
-            request.sendChunk(fs_browser_header, strlen(fs_browser_header));
-            String header = "<h1>" + String(f.path()) + "</h1><br>\n";
-            request.sendChunk(header.c_str(), static_cast<ssize_t>(header.length()));
-
-            if (path.length() > 1) {
-                int idx = path.lastIndexOf('/');
-                String up = "<button type=button onclick=\"\" style=\"visibility: hidden;\">Delete</button>&nbsp;&nbsp;&nbsp;<a href=/debug/fs" + path.substring(0, static_cast<unsigned int>(idx + 1)) + ">..</a><br>\n";
-
-                request.sendChunk(up.c_str(), static_cast<ssize_t>(up.length()));
-            }
-
-            File file = f.openNextFile();
-            while(file) {
-                String s = "<button type=button onclick=\"deleteFile('" + String(file.path()) + "')\">Delete</button>&nbsp;&nbsp;&nbsp;<a href=/debug/fs" + String(file.path()) + (file.isDirectory() ? "/" : "") + ">"+ file.name() + (file.isDirectory() ? "/" : "") +"</a><br>\n";
-                request.sendChunk(s.c_str(), static_cast<ssize_t>(s.length()));
-                file = f.openNextFile();
-            }
-
-            request.sendChunk(fs_browser_footer, strlen(fs_browser_footer));
-
-            return request.endChunkedResponse();
-        }
+        return browse_get(request, path);
     });
 
     server.on_HTTPThread("/debug/fs/*", HTTP_DELETE, [this](WebServerRequest request) {
         String path = request.uri().substring(ARRAY_SIZE("/debug/fs") - 1);
-        if (path.length() > 1 && path[path.length() - 1] == '/')
-            path = path.substring(0, path.length() - 1);
 
-        if (!LittleFS.exists(path))
-            return request.send(404, "text/plain", ("File " + path + " not found").c_str());
-
-        File f = LittleFS.open(path);
-        if (!f.isDirectory()) {
-            f.close();
-            LittleFS.remove(path);
-            return request.send(200, "text/plain", ("File " + path + " deleted").c_str());
-        } else {
-            f.close();
-            remove_directory(path.c_str());
-            return request.send(200, "text/plain", ("Directory " + path + " and all contents deleted").c_str());
-        }
+        return browse_delete(request, path);
     });
 
     server.on_HTTPThread("/debug/fs/*", HTTP_PUT, [this](WebServerRequest request) {
         String path = request.uri().substring(ARRAY_SIZE("/debug/fs") - 1);
-        bool create_directory = path.length() > 1 && path[path.length() - 1] == '/';
-        if (create_directory)
-            path = path.substring(0, path.length() - 1);
 
-        if (LittleFS.exists(path)) {
-            File f = LittleFS.open(path);
-            if (!f.isDirectory() && create_directory)
-                return request.send(400, "text/plain", ("File " + path + " already exists and is not a directory").c_str());
-            if (f.isDirectory() && !create_directory)
-                return request.send(400, "text/plain", ("Directory " + path + " already exists").c_str());
-            if (f.isDirectory())
-                return request.send(200, "text/plain", ("Directory " + path + " already exists").c_str());
-            else {
-                f.close();
-                LittleFS.remove(path);
-            }
-        }
+        return browse_put(request, path);
+    });
 
-        if (create_directory) {
-            LittleFS.mkdir(path);
-            return request.send(200, "text/plain", ("Directory " + path + " created").c_str());
-        }
+    server.on_HTTPThread("/debug/fs", HTTP_GET, [this](WebServerRequest request) {
+        return browse_get(request, "/");
+    });
 
-        File f = LittleFS.open(path, "w");
+    server.on_HTTPThread("/debug/fs", HTTP_DELETE, [this](WebServerRequest request) {
+        return browse_delete(request, "/");
+    });
 
-        auto size = request.contentLength();
-        auto payload = heap_alloc_array<char>(size);
-        if (request.receive(payload.get(), size) < 0)
-            return request.send(500, "text/plain", "failed to receive");
-
-        f.write(reinterpret_cast<uint8_t *>(payload.get()), size);
-        return request.send(200, "text/plain", ("File " + path + " created.").c_str());
+    server.on_HTTPThread("/debug/fs", HTTP_PUT, [this](WebServerRequest request) {
+        return browse_put(request, "/");
     });
 #endif
 }
@@ -518,7 +556,7 @@ void Debug::register_events()
     }
 
     register_task("tiT",            TCPIP_THREAD_STACKSIZE);
-    register_task("emac_rx",        2048, Optional); // stack size from esp_eth_mac.h
+    register_task("emac_rx",        2048, Optional); // stack size set by us in ethernet.cpp
     register_task("wifi",           6656, Optional); // stack size observed at runtime from task creation
     register_task("sys_evt",        ESP_TASKD_EVENT_STACK); // created in WiFiGeneric.cpp
     register_task("arduino_events", 4096); // stack size from WiFiGeneric.cpp
@@ -543,7 +581,7 @@ void Debug::register_events()
 #define CHECK_PSRAM 0
 #endif
 
-void Debug::loop()
+void Debug::task_scheduler_idle_call()
 {
     micros_t start = now_us();
     if (CHECK_PSRAM && check_psram_next) {

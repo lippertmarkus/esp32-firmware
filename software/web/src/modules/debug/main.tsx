@@ -67,6 +67,8 @@ export class Debug extends Component {
             __("debug.content.conf_array_buf"),
             __("debug.content.conf_object_buf"),
             __("debug.content.conf_union_buf"),
+            __("debug.content.conf_uint53_buf"),
+            __("debug.content.conf_int52_buf"),
         ];
 
         return (
@@ -149,6 +151,10 @@ export class Debug extends Component {
 
                 <FormSeparator heading={__("debug.content.config_buffers")} first={false} />
 
+                <Row l={<p class="mb-0 form-label text-center">{__("debug.content.dram")}</p>}
+                     c={<p class="mb-0 form-label text-center">{__("debug.content.iram")}</p>}
+                     r={<p class="mb-0 form-label text-center">{__("debug.content.psram")}</p>}/>
+
                 <Row label={__("debug.content.conf_uint_buf")}
                      c={<OutputFloat value={state_slow.conf_uint_buf_size} digits={0} scale={0} unit="B"/>}/>
 
@@ -169,6 +175,12 @@ export class Debug extends Component {
 
                 <Row label={__("debug.content.conf_union_buf")}
                      l={<OutputFloat value={state_slow.conf_union_buf_size} digits={0} scale={0} unit="B"/>}/>
+
+                <Row label={__("debug.content.conf_uint53_buf")}
+                     c={<OutputFloat value={state_slow.conf_uint53_buf_size} digits={0} scale={0} unit="B"/>}/>
+
+                <Row label={__("debug.content.conf_int52_buf")}
+                     c={<OutputFloat value={state_slow.conf_int52_buf_size} digits={0} scale={0} unit="B"/>}/>
 
                 <FormSeparator heading={__("debug.content.config_slots")} first={false} />
 
@@ -222,11 +234,9 @@ export class Debug extends Component {
 
                 <FormSeparator heading={__("debug.content.stack_hwm_header")} first={false} />
 
-                <Row label={__("debug.content.task_name")}
-                     l={<p class="mb-0 mt-2 form-label text-center">{__("debug.content.free_stack")}</p>}
+                <Row l={<p class="mb-0 mt-2 form-label text-center">{__("debug.content.free_stack")}</p>}
                      c={<p class="mb-0 mt-2 form-label text-center">{__("debug.content.used_stack")}</p>}
                      r={<p class="mb-0 mt-2 form-label text-center">{__("debug.content.stack_size")}</p>}/>
-
 
                 {state_hwm.map((task_hwm) => {
                     return <Row label={task_hwm.task_name}

@@ -30,6 +30,8 @@
 
 #include "gcc_warnings.h"
 
+#define SUCCESSFUL_READ_TIMEOUT 1_min
+
 void GenericModbusTCPClient::connect_callback()
 {
     last_successful_read = now_us();
@@ -44,7 +46,7 @@ void GenericModbusTCPClient::start_generic_read()
         return;
     }
 
-    if (deadline_elapsed(last_successful_read + successful_read_timeout)) {
+    if (deadline_elapsed(last_successful_read + SUCCESSFUL_READ_TIMEOUT)) {
         logger.printfln_prefixed(event_log_prefix_override, event_log_prefix_override_len,
                                  "%sLast successful read occurred too long ago, reconnecting to %s:%u",
                                  event_log_message_prefix,
@@ -106,7 +108,7 @@ void GenericModbusTCPClient::read_next()
         }
 
         if (result != TFModbusTCPClientTransactionResult::Success) {
-            if (result != TFModbusTCPClientTransactionResult::Timeout || (last_read_result_burst_length % 10) == 0) {
+            if (log_read_errors && (result != TFModbusTCPClientTransactionResult::Timeout || (last_read_result_burst_length % 10) == 0)) {
                 logger.printfln_prefixed(event_log_prefix_override, event_log_prefix_override_len,
                                          "%sModbus read error (host='%s' port=%u devaddr=%u fcode=%d regaddr=%u regcnt=%u burstlen=%zu): %s (%d)",
                                          event_log_message_prefix,

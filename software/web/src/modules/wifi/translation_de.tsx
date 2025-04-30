@@ -22,7 +22,7 @@ let x = {
         "content": {
             "sta_settings": "WLAN-Verbindung",
             "sta_enable_sta": "WLAN-Verbindung aktiviert",
-            "sta_enable_sta_desc": <>{__("The_device")} verbindet sich beim Start automatisch zum konfigurierten Netzwerk</>,
+            "sta_enable_sta_desc": <>{__("The_device")} verbindet sich beim Start automatisch zum konfigurierten Netzwerk.</>,
             "sta_ssid": "Netzwerkname (SSID)",
             "sta_scan": "Netzwerksuche",
             "sta_bssid": "BSSID",
@@ -35,16 +35,19 @@ let x = {
 
             "ap_settings": "WLAN-Access-Point",
             "ap_enable": "Access Point",
-            "ap_enable_muted": <><a href="{{{manual_url}}}">siehe Betriebsanleitung für Details</a></>,
+            "ap_enable_help": <>
+                <p>Der Access-Point kann in einem von zwei Modi betrieben werden: Entweder kann er immer aktiv sein oder nur dann, wenn die Verbindung zu einem anderen WLAN bzw. zu einem LAN nicht konfiguriert oder fehlgeschlagen ist. </p>
+                <p><strong>Wir empfehlen, den Access-Point nie komplett zu deaktivieren, da sonst bei einer fehlgeschlagenen Verbindung zu einem anderen Netzwerk das Webinterface nicht mehr erreicht werden kann.</strong></p>
+            </>,
             "ap_enabled": "Aktiviert",
             "ap_fallback_only": "Nur als Fallback",
             "ap_disabled": "Deaktiviert",
             "ap_ssid": "Netzwerkname (SSID)",
             "ap_hide_ssid": "Netzwerkname versteckt",
-            "ap_hide_ssid_desc": /*FFN*/(bssid: string) => <>{__("The_device")} ist unter der BSSID {bssid} erreichbar.</>/*NF*/,
+            "ap_hide_ssid_desc": "Einige Geräte können versteckte WLANs auf Kanal 12 und 13 nicht finden.",
             "ap_passphrase": "Passphrase",
             "ap_channel": "Kanal",
-            "ap_channel_muted": "ignoriert wenn WLAN-Verbindung aktiv ist",
+            "ap_channel_muted": "ignoriert, wenn WLAN-Verbindung aktiv ist",
             "ap_channel_auto_select": "Automatische Auswahl",
 
             "confirm_title": "WLAN-Access-Point deaktivieren?",

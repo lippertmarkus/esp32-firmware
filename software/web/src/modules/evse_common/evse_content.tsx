@@ -86,7 +86,7 @@ export class EVSE extends Component<{status_ref?: RefObject<EVSEStatus>}, {}> {
                         <InputText value={toDisplayCurrent(state.allowed_charging_current)}/>
                     </FormRow>
 
-                    <FormRow label={__("evse.content.error_state")} label_muted={__("evse.content.error_state_desc")}>
+                    <FormRow label={__("evse.content.error_state")} help={__("evse.content.error_state_help")}>
                         <IndicatorGroup
                             value={state.error_state == 0 ? 0 : state.error_state - 1}
                             items={[
@@ -155,7 +155,7 @@ export class EVSE extends Component<{status_ref?: RefObject<EVSEStatus>}, {}> {
                                             no_variant: "secondary",
                                             yes_variant: "danger",
                                         }))
-                                        return false;
+                                            return;
 
                                         await API.call('evse/reset_dc_fault_current_state',
                                                     {"password": 0xDC42FA23},
@@ -387,12 +387,12 @@ export class EVSE extends Component<{status_ref?: RefObject<EVSEStatus>}, {}> {
                                 </FormRow>))
                         }
 
-                        <FormRow label={__("evse.content.car_stopped_charging")}>
+                        <FormRow label={__("evse.content.vehicle_stopped_charging")}>
                             <IndicatorGroup
                                 value={ll_state.charging_time}
                                 items={[
-                                    ["secondary", __("evse.content.car_stopped_false")],
-                                    ["primary", __("evse.content.car_stopped_true")]
+                                    ["secondary", __("evse.content.vehicle_stopped_false")],
+                                    ["primary", __("evse.content.vehicle_stopped_true")]
                                 ]}/>
                         </FormRow>
 
@@ -456,7 +456,7 @@ export class EVSE extends Component<{status_ref?: RefObject<EVSEStatus>}, {}> {
 
                             <FormRow label={__("evse.content.user_calibration_description")} label_muted={__("evse.content.user_calibration_description_muted")}>
                                 <div class="input-group pb-2">
-                                    <Button variant="primary" className="form-control rounded-right mr-2" href="evse/user_calibration" download="calibration.json">{__("evse.content.user_calibration_download")}</Button>
+                                    <Button as="a" variant="primary" className="form-control rounded-right mr-2" href="evse/user_calibration" download="calibration.json">{__("evse.content.user_calibration_download")}</Button>
                                     <Button variant="primary" className="form-control rounded-left"
                                         onClick={async () =>  API.save("evse/user_calibration", {
                                                 "user_calibration_active": false,

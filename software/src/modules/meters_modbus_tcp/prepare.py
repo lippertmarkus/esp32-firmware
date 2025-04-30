@@ -8,21 +8,25 @@ import alpha_ess
 import shelly
 import goodwe
 import solax
-import fronius
+import fronius_gen24_plus
 import hailei
 import fox_ess
 import siemens
 import carlo_gavazzi
 import solaredge
 import eastron
+import tinkerforge
+import sax_power
+import e3dc
+import huawei
 
 tfutil.create_parent_module(__file__, 'software')
 
 from software import util
 
 specs = sungrow.specs + solarmax.specs + victron_energy.specs + deye.specs + alpha_ess.specs + shelly.specs + goodwe.specs \
-      + solax.specs + fronius.specs + hailei.specs + fox_ess.specs + siemens.specs + carlo_gavazzi.specs + solaredge.specs \
-      + eastron.specs
+      + solax.specs + fronius_gen24_plus.specs + hailei.specs + fox_ess.specs + siemens.specs + carlo_gavazzi.specs + solaredge.specs \
+      + eastron.specs + tinkerforge.specs + sax_power.specs + e3dc.specs + huawei.specs
 spec_values = []
 
 for spec in specs:
@@ -39,9 +43,9 @@ for spec in specs:
         current_index = 0
 
         for value in spec['values']:
-            variant_value = value.get('variant')
+            variants_value = value.get('variants')
 
-            if variant_value != None and variant_value not in variant_spec:
+            if variants_value != None and variant_spec not in variants_value:
                 continue
 
             if value['name'] in value_names:

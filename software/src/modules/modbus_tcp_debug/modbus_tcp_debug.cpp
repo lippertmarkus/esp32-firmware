@@ -21,9 +21,11 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <TFJson.h>
 
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
+#include "tools/hexdump.h"
 #include "modules/modbus_tcp_client/generic_tcp_client_connector_base.h"
 
 void ModbusTCPDebug::pre_setup()
@@ -37,34 +39,36 @@ void ModbusTCPDebug::pre_setup()
         {"data_count", Config::Uint16(0)},
         {"write_data", Config::Str("", 0, TF_MODBUS_TCP_MAX_WRITE_REGISTER_COUNT * 4)},
         {"timeout", Config::Uint(2000)},
-        {"byte_order", Config::Uint8(0)},
+        {"cookie", Config::Uint32(0)},
     });
 }
 
-[[gnu::format(__printf__, 4, 5)]] static void report_errorf(IChunkedResponse *response, Ownership *ownership, uint32_t owner_id, const char *fmt, ...);
-static void report_errorf(IChunkedResponse *response, Ownership *ownership, uint32_t owner_id, const char *fmt, ...)
+[[gnu::format(__printf__, 2, 3)]] static void report_errorf(uint32_t cookie, const char *fmt, ...);
+static void report_errorf(uint32_t cookie, const char *fmt, ...)
 {
-    OwnershipGuard ownership_guard(ownership, owner_id);
-
-    if (!ownership_guard.have_ownership()) {
-        return;
-    }
-
     va_list args;
+    char buf[256];
+    TFJsonSerializer json{buf, sizeof(buf)};
 
-    response->begin(true);
+    json.addObject();
+    json.addMemberNumber("cookie", cookie);
     va_start(args, fmt);
-    response->vwritef(fmt, args);
+    json.addMemberStringVF("error", fmt, args);
+    json.addMemberNull("read_data");
     va_end(args);
-    response->flush();
-    response->end("");
+    json.endObject();
+    json.end();
+
+    ws.pushRawStateUpdate(buf, "modbus_tcp_debug/transact_result");
 }
 
 void ModbusTCPDebug::register_urls()
 {
-    api.addResponse("modbus_tcp_debug/transact", &transact, {}, [this](IChunkedResponse *response, Ownership *ownership, uint32_t owner_id) {
-        if (client != nullptr) {
-            report_errorf(response, ownership, owner_id, "Another transaction is already in progress");
+    api.addCommand("modbus_tcp_debug/transact", &transact, {}, [this](String &errmsg) {
+        uint32_t cookie = transact.get("cookie")->asUint();
+
+        if (connected_client != nullptr) {
+            report_errorf(cookie, "Another transaction is already in progress");
             return;
         }
 
@@ -76,101 +80,154 @@ void ModbusTCPDebug::register_urls()
         uint16_t data_count = transact.get("data_count")->asUint();
         String write_data = transact.get("write_data")->asString();
         millis_t timeout = millis_t{transact.get("timeout")->asUint()};
-        TFModbusTCPByteOrder byte_order = transact.get("byte_order")->asEnum<TFModbusTCPByteOrder>();
+        bool hexload_registers = false;
+        bool hexdump_registers = false;
 
         switch (function_code) {
         case TFModbusTCPFunctionCode::ReadCoils:
         case TFModbusTCPFunctionCode::ReadDiscreteInputs:
-            report_errorf(response, ownership, owner_id, "Function code %u is not supported yet", static_cast<uint8_t>(function_code));
+            report_errorf(cookie, "Function code %u is not supported yet", static_cast<uint8_t>(function_code));
             return;
 
         case TFModbusTCPFunctionCode::ReadHoldingRegisters:
         case TFModbusTCPFunctionCode::ReadInputRegisters:
+            hexdump_registers = true;
             break;
 
         case TFModbusTCPFunctionCode::WriteSingleCoil:
-        case TFModbusTCPFunctionCode::WriteSingleRegister:
-        case TFModbusTCPFunctionCode::WriteMultipleCoils:
-        case TFModbusTCPFunctionCode::WriteMultipleRegisters:
-            report_errorf(response, ownership, owner_id, "Function code %u is not supported yet", static_cast<uint8_t>(function_code));
+            report_errorf(cookie, "Function code %u is not supported yet", static_cast<uint8_t>(function_code));
             return;
+
+        case TFModbusTCPFunctionCode::WriteSingleRegister:
+            hexload_registers = true;
+            break;
+
+        case TFModbusTCPFunctionCode::WriteMultipleCoils:
+            report_errorf(cookie, "Function code %u is not supported yet", static_cast<uint8_t>(function_code));
+            return;
+
+        case TFModbusTCPFunctionCode::WriteMultipleRegisters:
+            hexload_registers = true;
+            break;
         }
 
-        client = new TFModbusTCPClient(byte_order);
-
-        client->connect(host.c_str(), port,
-        [this, response, ownership, owner_id, host, port, device_address, function_code, start_address, data_count, write_data, timeout](TFGenericTCPClientConnectResult connect_result, int error_number) {
+        modbus_tcp_client.get_pool()->acquire(host.c_str(), port,
+        [this, cookie, host, port, device_address, function_code, start_address, data_count, write_data, timeout, hexload_registers, hexdump_registers](TFGenericTCPClientConnectResult connect_result, int error_number, TFGenericTCPSharedClient *shared_client) {
             if (connect_result != TFGenericTCPClientConnectResult::Connected) {
                 char connect_error[256] = "";
 
                 GenericTCPClientConnectorBase::format_connect_error(connect_result, error_number, host.c_str(), port, connect_error, sizeof(connect_error));
-                report_errorf(response, ownership, owner_id, "%s", connect_error);
-
-                delete client;
-                client = nullptr;
-                client_disconnect = false;
+                report_errorf(cookie, "%s", connect_error);
                 return;
             }
 
-            // FIXME: write data into buffer for write function codes
+            connected_client = shared_client;
+            transact_buffer = static_cast<uint16_t *>(malloc(sizeof(uint16_t) * TF_MODBUS_TCP_MAX_READ_REGISTER_COUNT));
 
-            client->transact(device_address, function_code, start_address, data_count, transact_buffer, timeout,
-            [this, response, ownership, owner_id, data_count](TFModbusTCPClientTransactionResult transact_result) {
+            if (transact_buffer == nullptr) {
+                report_errorf(cookie, "Cannot allocate transaction buffer");
+
+                release_client = true;
+                return;
+            }
+
+            // FIXME: hexload coils for coil function codes
+
+            if (hexload_registers) {
+                size_t nibble_count = write_data.length();
+
+                if (nibble_count > TF_MODBUS_TCP_MAX_WRITE_REGISTER_COUNT * 4) {
+                    report_errorf(cookie, "Write data is too long");
+
+                    release_client = true;
+                    return;
+                }
+
+                if ((nibble_count % 4) != 0) {
+                    report_errorf(cookie, "Write data length must be multiple of 4");
+
+                    release_client = true;
+                    return;
+                }
+
+                if (nibble_count != data_count * 4) {
+                    report_errorf(cookie, "Write data nibble count mismatch");
+
+                    release_client = true;
+                    return;
+                }
+
+                ssize_t data_hexload_len = hexload<uint16_t>(write_data.c_str(), nibble_count, transact_buffer, TF_MODBUS_TCP_MAX_WRITE_REGISTER_COUNT);
+
+                if (data_hexload_len < 0) {
+                    report_errorf(cookie, "Write data is malformed");
+
+                    release_client = true;
+                    return;
+                }
+
+                if (data_hexload_len != data_count) {
+                    report_errorf(cookie, "Write data register count mismatch");
+
+                    release_client = true;
+                    return;
+                }
+            }
+
+            static_cast<TFModbusTCPSharedClient *>(connected_client)->transact(device_address, function_code, start_address, data_count, transact_buffer, timeout,
+            [this, cookie, data_count, hexdump_registers](TFModbusTCPClientTransactionResult transact_result) {
                 if (transact_result != TFModbusTCPClientTransactionResult::Success) {
-                    report_errorf(response, ownership, owner_id,
-                                  "Transaction failed: %s (%d)",
+                    report_errorf(cookie, "Transaction failed: %s (%d)",
                                   get_tf_modbus_tcp_client_transaction_result_name(transact_result),
                                   static_cast<int>(transact_result));
 
-                    client_disconnect = true;
+                    release_client = true;
                     return;
                 }
 
-                OwnershipGuard ownership_guard(ownership, owner_id);
+                char data_hexdump[TF_MODBUS_TCP_MAX_READ_REGISTER_COUNT * 4 + 1];
+                char buf[64 + sizeof(data_hexdump)];
+                TFJsonSerializer json{buf, sizeof(buf)};
 
-                if (!ownership_guard.have_ownership()) {
-                    client_disconnect = true;
-                    return;
+                json.addObject();
+                json.addMemberNumber("cookie", cookie);
+                json.addMemberNull("error");
+
+                // FIXME: hexdump coils for coil function codes
+
+                if (hexdump_registers) {
+                    hexdump<uint16_t>(transact_buffer, data_count, data_hexdump, ARRAY_SIZE(data_hexdump), HexdumpCase::Lower);
+                    json.addMemberString("read_data", data_hexdump);
+                }
+                else {
+                    json.addMemberNull("read_data");
                 }
 
-                // FIXME: format coils for coil function codes
+                json.endObject();
+                json.end();
 
-                static const char *lookup = "0123456789abcdef";
+                ws.pushRawStateUpdate(buf, "modbus_tcp_debug/transact_result");
 
-                response->begin(true);
-                response->write("READDATA:");
-
-                for (size_t i = 0; i < data_count; ++i) {
-                    char nibbles[4];
-
-                    for (size_t n = 0; n < 4; ++n) {
-                        nibbles[n] = lookup[(transact_buffer[i] >> (12 - 4 * n)) & 0x0f];
-                    }
-
-                    response->write(nibbles, 4);
-                }
-
-                response->flush();
-                response->end("");
-
-                client_disconnect = true;
+                release_client = true;
             });
         },
-        [this](TFGenericTCPClientDisconnectReason reason, int error_number) {
-            delete client;
-            client = nullptr;
-            client_disconnect = false;
+        [this](TFGenericTCPClientDisconnectReason reason, int error_number, TFGenericTCPSharedClient *shared_client) {
+            if (connected_client != shared_client) {
+                return;
+            }
+
+            connected_client = nullptr;
+            release_client = false;
+
+            free(transact_buffer);
+            transact_buffer = nullptr;
         });
-    });
+    }, true);
 }
 
 void ModbusTCPDebug::loop()
 {
-    if (client != nullptr) {
-        client->tick();
-
-        if (client_disconnect) {
-            client->disconnect();
-        }
+    if (release_client) {
+        modbus_tcp_client.get_pool()->release(connected_client);
     }
 }

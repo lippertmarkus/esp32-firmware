@@ -22,6 +22,7 @@
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
 #include "sun_spec_model_specs.h"
+#include "tools/hexdump.h"
 #include "modules/meters/meter_location.enum.h"
 #include "modules/modbus_tcp_client/modbus_tcp_tools.h"
 #include "modules/meters_sun_spec/models/model_001.h"
@@ -31,6 +32,7 @@
 #define SUN_SPEC_ID 0x53756E53
 #define COMMON_MODEL_ID 1
 #define NON_IMPLEMENTED_UINT16 0xFFFF
+#define SUCCESSFUL_PARSE_TIMEOUT 1_min
 
 #define trace(fmt, ...) \
     do { \
@@ -82,6 +84,12 @@ void MeterSunSpec::setup(Config *ephemeral_config)
 
     task_scheduler.scheduleWithFixedDelay([this]() {
         if (read_allowed) {
+            if (deadline_elapsed(last_successful_parse + SUCCESSFUL_PARSE_TIMEOUT)) {
+                logger.printfln("Last successful parse occurred too long ago, reconnecting to %s:%u", host.c_str(), port);
+                force_reconnect();
+                return;
+            }
+
             read_allowed = false;
             start_generic_read();
         }
@@ -114,6 +122,8 @@ void MeterSunSpec::pre_reboot()
 void MeterSunSpec::connect_callback()
 {
     GenericModbusTCPClient::connect_callback();
+
+    last_successful_parse = now_us();
 
     scan_start();
 }
@@ -150,6 +160,37 @@ bool MeterSunSpec::alloc_read_buffer(size_t model_regcount)
     return true;
 }
 
+void MeterSunSpec::trace_response()
+{
+    if (generic_read_request.result != TFModbusTCPClientTransactionResult::Success) {
+        trace("m%lu a%zu c%zu e%lu",
+              slot,
+              generic_read_request.start_address,
+              generic_read_request.register_count,
+              static_cast<uint32_t>(generic_read_request.result));
+    }
+    else {
+        char data_buf[125 * 4 + 1]; // 4 nibble per register for 125 registers plus \n
+        size_t data_buf_used;
+
+        for (size_t i = 0; i < 2; ++i) {
+            if (generic_read_request.data[i] != nullptr) {
+                trace("m%lu a%zu c%zu d%zu",
+                      slot,
+                      generic_read_request.start_address,
+                      generic_read_request.register_count,
+                      i);
+
+                data_buf_used = hexdump(generic_read_request.data[i], generic_read_request.register_count, data_buf, ARRAY_SIZE(data_buf), HexdumpCase::Lower);
+                data_buf[data_buf_used] = '\n';
+                ++data_buf_used;
+
+                logger.trace_plain(trace_buffer_index, data_buf, data_buf_used);
+            }
+        }
+    }
+}
+
 void MeterSunSpec::read_start(size_t model_regcount)
 {
     if (!alloc_read_buffer(model_regcount)) {
@@ -163,56 +204,19 @@ void MeterSunSpec::read_start(size_t model_regcount)
     start_generic_read();
 }
 
-static const char *lookup = "0123456789abcdef";
-
-static void registers_to_string(uint16_t *data, size_t data_len, char *buf, size_t *buf_used)
-{
-    for (size_t i = 0; i < data_len; ++i) {
-        for (size_t n = 0; n < 4; ++n) {
-            buf[4 * i + n] = lookup[(data[i] >> (12 - 4 * n)) & 0x0f];
-        }
-    }
-
-    *buf_used = 4 * data_len;
-}
-
 void MeterSunSpec::read_done_callback()
 {
     read_allowed = true;
 
-    if (generic_read_request.result != TFModbusTCPClientTransactionResult::Success) {
-        trace("m%lu a%zu c%zu e%lu",
-              slot,
-              generic_read_request.start_address,
-              generic_read_request.register_count,
-              static_cast<uint32_t>(generic_read_request.result));
+    trace_response();
 
+    if (generic_read_request.result != TFModbusTCPClientTransactionResult::Success) {
         if (generic_read_request.result == TFModbusTCPClientTransactionResult::Timeout) {
             auto timeout = errors->get("timeout");
             timeout->updateUint(timeout->asUint() + 1);
         }
 
         return;
-    }
-
-    char data_buf[125 * 4 + 1]; // 4 nibble per register for 125 registers plus \n
-    size_t data_buf_used;
-
-    for (size_t i = 0; i < 2; ++i) {
-        if (generic_read_request.data[i] != nullptr) {
-            registers_to_string(generic_read_request.data[i], generic_read_request.register_count, data_buf, &data_buf_used);
-
-            trace("m%lu a%zu c%zu d%zu",
-                  slot,
-                  generic_read_request.start_address,
-                  generic_read_request.register_count,
-                  i);
-
-            data_buf[data_buf_used] = '\n';
-            ++data_buf_used;
-
-            logger.trace_plain(trace_buffer_index, data_buf, data_buf_used);
-        }
     }
 
     if (!values_declared) {
@@ -260,6 +264,9 @@ void MeterSunSpec::read_done_callback()
         // TODO: Read again if parsing failed?
         return;
     }
+    else {
+        last_successful_parse = now_us();
+    }
 
     if (check_phase_voltages) {
         bool parse_again = false;
@@ -278,7 +285,7 @@ void MeterSunSpec::read_done_callback()
                 quirks |= SUN_SPEC_QUIRKS_FLOAT_IS_LE32;
                 parse_again = true;
             }
-            else if (value > 200) {
+            else if (value > 100) {
                 logger.printfln_meter("Check for float-is-le32 quirk completed due to normal L%zu-N voltage value: %.1f V", i + 1, static_cast<double>(value));
             }
             else {
@@ -294,6 +301,9 @@ void MeterSunSpec::read_done_callback()
                 auto inconsistency = errors->get("inconsistency");
                 inconsistency->updateUint(inconsistency->asUint() + 1);
                 // TODO: Read again if parsing failed?
+            }
+            else {
+                last_successful_parse = now_us();
             }
         }
     }
@@ -320,6 +330,7 @@ void MeterSunSpec::scan_start()
         return;
     }
 
+    log_read_errors = false; // don't log errors while probing for the correct base address
     scan_base_address_index = 0;
     scan_state = ScanState::Idle;
     scan_state_next = ScanState::ReadSunSpecID;
@@ -344,15 +355,40 @@ void MeterSunSpec::scan_read_delay()
     }, 1_s + (millis_t{esp_random() % 4000}));
 }
 
+void MeterSunSpec::scan_next_base_address()
+{
+    ++scan_base_address_index;
+
+    if (scan_base_address_index >= ARRAY_SIZE(scan_base_addresses)) {
+        logger.printfln_meter("No SunSpec device found at %s:%u:%u", host.c_str(), port, device_address);
+        scan_start_delay();
+    }
+    else {
+        generic_read_request.start_address = scan_base_addresses[scan_base_address_index];
+        generic_read_request.register_count = 2;
+        scan_state_next = ScanState::ReadSunSpecID;
+
+        start_generic_read();
+    }
+}
+
 void MeterSunSpec::scan_next()
 {
+    trace_response();
+
     if (generic_read_request.result != TFModbusTCPClientTransactionResult::Success) {
         if (generic_read_request.result == TFModbusTCPClientTransactionResult::Timeout) {
             auto timeout = errors->get("timeout");
             timeout->updateUint(timeout->asUint() + 1);
         }
 
-        scan_read_delay();
+        if (scan_state_next == ScanState::ReadSunSpecID) {
+            scan_next_base_address();
+        }
+        else {
+            scan_read_delay();
+        }
+
         return;
     }
 
@@ -369,24 +405,13 @@ void MeterSunSpec::scan_next()
                 if (sun_spec_id == SUN_SPEC_ID) {
                     generic_read_request.start_address += generic_read_request.register_count;
                     generic_read_request.register_count = 2;
+                    log_read_errors = true; // log errors again after the correct base address was found
                     scan_state_next = ScanState::ReadModelHeader;
 
                     start_generic_read();
                 }
                 else {
-                    ++scan_base_address_index;
-
-                    if (scan_base_address_index >= ARRAY_SIZE(scan_base_addresses)) {
-                        logger.printfln_meter("No SunSpec device found at %s:%u:%u", host.c_str(), port, device_address);
-                        scan_start_delay();
-                    }
-                    else {
-                        generic_read_request.start_address = scan_base_addresses[scan_base_address_index];
-                        generic_read_request.register_count = 2;
-                        scan_state_next = ScanState::ReadSunSpecID;
-
-                        start_generic_read();
-                    }
+                    scan_next_base_address();
                 }
             }
 

@@ -43,6 +43,7 @@ import { is_day_ahead_prices_enabled, get_average_price_today, get_average_price
 import { StatusSection } from "../../ts/components/status_section";
 import { Button } from "react-bootstrap";
 import { ControlPeriod } from "./control_period.enum";
+import { sgr_blocking_override, state } from "./api";
 
 export function HeatingNavbar() {
     return <NavbarItem name="heating" module="heating" title={__("heating.navbar.heating")} symbol={<Thermometer />} />;
@@ -53,6 +54,8 @@ type HeatingConfig = API.getType["heating/config"];
 interface HeatingState {
     heating_state: API.getType["heating/state"];
     dap_config: API.getType["day_ahead_prices/config"];
+    active_sgr_blocking_type: number;
+    active_sgr_extended_type: number;
 }
 
 export class Heating extends ConfigComponent<'heating/config', {status_ref?: RefObject<HeatingStatus>}, HeatingState> {
@@ -94,6 +97,12 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
 
         util.addApiEventListener("heating/state", () => {
             this.setState({heating_state: API.get("heating/state")});
+        });
+
+        util.addApiEventListener("heating/config", () => {
+            let config = API.get("heating/config");
+
+            this.setState({active_sgr_blocking_type: config.sgr_blocking_type, active_sgr_extended_type: config.sgr_extended_type});
         });
 
         util.addApiEventListener("day_ahead_prices/prices", () => {
@@ -211,9 +220,6 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
             data.values[0].push(dap_prices.first_date * 60 + dap_prices.prices.length * 60 * resolution_multiplier - 1);
             data.values[1].push(get_price_from_index(dap_prices.prices.length - 1) / 1000.0 + grid_costs_and_taxes_and_supplier_markup);
 
-            const solar_forecast_today     = get_kwh_today();
-            const solar_forecast_tomorrow  = get_kwh_tomorrow();
-            const solar_forecast_threshold = this.state.yield_forecast_threshold;
             const hour_multiplier = 60/resolution_multiplier;
             const num_per_day     = 24*hour_multiplier;
             const extended        = this.state.extended ? extended_hours*hour_multiplier : 0;
@@ -347,24 +353,46 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
                         </InputText>
                     </FormRow>
                     <FormRow label={__("heating.content.sg_ready_output") + " 1"} label_muted={__("heating.content.sg_ready_output1_muted")} help={__("heating.content.sg_ready_output1_help")}>
-                        <InputSelect
-                            items={[
-                                ["0", __("heating.content.closed")],
-                                ["1", __("heating.content.opened")]
-                            ]}
-                            value={state.sgr_blocking_type}
-                            onValue={(v) => this.setState({sgr_blocking_type: parseInt(v)})}
-                        />
+                        <div class="row mx-n1">
+                            <div class="col px-1">
+                                <InputSelect
+                                    items={[
+                                        ["0", __("heating.content.output_active_closed")],
+                                        ["1", __("heating.content.output_active_open")]
+                                    ]}
+                                    value={state.sgr_blocking_type}
+                                    onValue={(v) => this.setState({sgr_blocking_type: parseInt(v)})}
+                                />
+                            </div>
+                            {state.active_sgr_blocking_type !== undefined ?
+                                <div class="col-auto px-1">
+                                    <Button variant="primary"
+                                            onClick={() => API.call("heating/toggle_sgr_blocking", {}, () => __("heating.content.toogle_now_failed")(1))}>
+                                        {state.heating_state.sgr_blocking === (state.active_sgr_blocking_type === 0) ? __("heating.content.open_now") : __("heating.content.close_now")}
+                                    </Button>
+                                </div> : undefined}
+                        </div>
                     </FormRow>
                     <FormRow label={__("heating.content.sg_ready_output") + " 2"} label_muted={__("heating.content.sg_ready_output2_muted")} help={__("heating.content.sg_ready_output2_help")}>
-                        <InputSelect
-                            items={[
-                                ["0", __("heating.content.closed")],
-                                ["1", __("heating.content.opened")]
-                            ]}
-                            value={state.sgr_extended_type}
-                            onValue={(v) => this.setState({sgr_extended_type: parseInt(v)})}
-                        />
+                        <div class="row mx-n1">
+                            <div class="col px-1">
+                                <InputSelect
+                                    items={[
+                                        ["0", __("heating.content.output_active_closed")],
+                                        ["1", __("heating.content.output_active_open")]
+                                    ]}
+                                    value={state.sgr_extended_type}
+                                    onValue={(v) => this.setState({sgr_extended_type: parseInt(v)})}
+                                />
+                            </div>
+                            {state.active_sgr_extended_type !== undefined ?
+                                <div class="col-auto px-1">
+                                    <Button variant="primary"
+                                            onClick={() => API.call("heating/toggle_sgr_extended", {}, () => __("heating.content.toogle_now_failed")(2))}>
+                                        {state.heating_state.sgr_extended === (state.active_sgr_extended_type === 0) ? __("heating.content.open_now") : __("heating.content.close_now")}
+                                    </Button>
+                                </div> : undefined}
+                        </div>
                     </FormRow>
                     <FormRow label={__("heating.content.control_period")} label_muted={__("heating.content.control_period_muted")} help={__("heating.content.control_period_help")}>
                         <InputSelect
@@ -389,7 +417,7 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
                     <FormRow label={__("heating.content.pv_excess_control")}
                              error={__("heating.content.meter_needs_activation")}
                              show_error={state.pv_excess_control && !meter_available}
-                             class="mb-xs-1 mb-md-0">
+                             class="mb-2 mb-lg-0">
                         <SwitchableInputNumber
                             switch_label_active={__("heating.content.active")}
                             switch_label_inactive={__("heating.content.inactive")}
@@ -403,13 +431,13 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
                             switch_label_min_width="110px"
                         />
                     </FormRow>
-                    <FormRow label={__("heating.content.or")} small={true} class="mb-0 mb-xs-1">
+                    <FormRow label={__("heating.content.or")} small={true} class="mb-0">
                         <div></div>
                     </FormRow>
                     <FormRow label={__("heating.content.dpc_low")}
                              error={__("heating.content.day_ahead_prices_needs_activation")}
                              show_error={state.extended && !day_ahead_prices_enabled}
-                             class="mb-xs-1 mb-md-0">
+                             class="mb-2 mb-lg-0">
                         <SwitchableInputNumber
                             switch_label_active={__("heating.content.active")}
                             switch_label_inactive={__("heating.content.inactive")}
@@ -423,7 +451,7 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
                             switch_label_min_width="110px"
                         />
                     </FormRow>
-                    <FormRow label={__("heating.content.but_only_if")} small={true} class="mb-0 mb-xs-1">
+                    <FormRow label={__("heating.content.but_only_if")} small={true} class="mb-0">
                         <div></div>
                     </FormRow>
                     <FormRow label={__("heating.content.pv_yield_forecast")}
@@ -576,8 +604,8 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
                     <FormRow label={__("heating.content.blocking_operation")}>
                         <InputSelect
                             items={[
-                                ["0", __("heating.content.closed")],
-                                ["1", __("heating.content.opened")]
+                                ["0", __("heating.content.input_active_closed")],
+                                ["1", __("heating.content.input_active_open")]
                             ]}
                             value={state.p14enwg_type}
                             onValue={(v) => this.setState({p14enwg_type: parseInt(v)})}
@@ -589,23 +617,121 @@ export class Heating extends ConfigComponent<'heating/config', {status_ref?: Ref
     }
 }
 
-export class HeatingStatus extends Component
+const MIN_OVERRIDE_DURATION = 15; // minutes
+
+export class HeatingStatus extends Component<{}, state & sgr_blocking_override & {override_duration: number, override_remaining: number, blocking: boolean}>
 {
+    override_remaining_interval: number = undefined;
+
+    constructor() {
+        super();
+
+        this.state = {
+            sgr_blocking: false,
+            sgr_extended: false,
+            p14enwg: false,
+            next_update: 0,
+            override_until: 0,
+            override_duration: MIN_OVERRIDE_DURATION,
+            override_remaining: null,
+            blocking: false,
+        };
+
+        util.addApiEventListener("heating/config", () => {
+            let config = API.get("heating/config");
+
+            this.setState({blocking: config.blocking});
+        });
+
+        util.addApiEventListener("heating/state", () => {
+            this.setState({...API.get("heating/state")});
+        });
+
+        util.addApiEventListener("heating/sgr_blocking_override", () => {
+            let sgr_blocking_override = API.get("heating/sgr_blocking_override");
+            let override_remaining: number = null;
+
+            if (sgr_blocking_override.override_until != 0) {
+                override_remaining = this.get_override_remaining();
+
+                if (this.override_remaining_interval === undefined) {
+                    this.override_remaining_interval = setInterval(() => this.setState({override_remaining: this.get_override_remaining()}), 5000);
+                }
+            }
+            else if (this.override_remaining_interval !== undefined) {
+                clearInterval(this.override_remaining_interval);
+                this.override_remaining_interval = undefined;
+            }
+
+            this.setState({override_until: sgr_blocking_override.override_until, override_remaining: override_remaining});
+        });
+    }
+
+    get_override_remaining() {
+        return Math.round(Math.max(0, this.state.override_until - util.get_date_now_1m_update_rate() / 60000));
+    }
+
     render() {
         if (!util.render_allowed()) {
-            return <StatusSection name="heating" />
+            return <StatusSection name="heating" />;
         }
 
-        const state = API.get('heating/state')
-
         return <StatusSection name="heating">
+            <FormRow hidden={!this.state.blocking} label={__("heating.content.override_blocking")}>
+                <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    let override_until = 0;
+                    let override_remaining = 0;
+
+                    if (this.state.override_until == 0) {
+                        override_until = Math.round(util.get_date_now_1m_update_rate() / 60000 + this.state.override_duration);
+                        override_remaining = this.state.override_duration;
+                    }
+
+                    await API.save("heating/sgr_blocking_override", {override_until: override_until}, () => "Override heating failed");
+
+                    this.setState({override_until: override_until, override_remaining: override_remaining});
+                }}>
+                    <div className="row mx-n1">
+                        <div className="col px-1">
+                            {this.state.override_until != 0 ?
+                                <InputNumber
+                                    unit={__("heating.content.minutes")}
+                                    value={this.state.override_remaining}
+                                    readonly
+                                /> :
+                                <InputNumber
+                                    disabled={!this.state.sgr_blocking}
+                                    unit={__("heating.content.minutes")}
+                                    value={this.state.override_duration}
+                                    onValue={(v) => this.setState({override_duration: v})}
+                                    min={MIN_OVERRIDE_DURATION}
+                                    max={60}
+                                />}
+                        </div>
+                        <div className="col-auto px-1">
+                            <Button
+                                disabled={!this.state.sgr_blocking && this.state.override_until == 0}
+                                variant={this.state.override_until != 0 ? "warning" : "primary"}
+                                type="submit">
+                                {this.state.override_until != 0 ? __("heating.content.discard_override") : __("heating.content.override")}
+                            </Button>
+                        </div>
+                    </div>
+                    {this.state.sgr_extended/*p14enwg*/ ?
+                        <div class="mt-1 mb-0">{__("heating.content.override_blocked_by_p14enwg")}</div>
+                        : undefined}
+                </form>
+            </FormRow>
             <FormRow label={__("heating.content.sg_ready")} label_muted={__("heating.content.sg_ready_muted")}>
                 <div class="row mx-n1">
                     <div class="col-md-6 px-1">
                         <div class="input-group">
                             <div class="input-group-prepend"><span class="heating-fixed-size input-group-text">{__("heating.content.blocked")}</span></div>
                             <InputText
-                                value={state.sgr_blocking ? __("heating.content.active") : __("heating.content.inactive")}
+                                value={this.state.sgr_blocking ? __("heating.content.active") : __("heating.content.inactive")}
                             />
                         </div>
                     </div>
@@ -613,7 +739,7 @@ export class HeatingStatus extends Component
                         <div class="input-group">
                             <div class="input-group-prepend"><span class="heating-fixed-size input-group-text">{__("heating.content.extended")}</span></div>
                             <InputText
-                                value={state.sgr_extended ? __("heating.content.active") : __("heating.content.inactive")}
+                                value={this.state.sgr_extended ? __("heating.content.active") : __("heating.content.inactive")}
                             />
                         </div>
                     </div>

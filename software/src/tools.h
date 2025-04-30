@@ -53,7 +53,7 @@ inline bool running_in_main_task()
 
 void led_blink(int8_t led_pin, int interval, int blinks_per_interval, int off_time_ms);
 
-uint16_t internet_checksum(const uint8_t *data, size_t length);
+uint16_t internet_checksum_u16(const uint16_t *data, size_t word_count);
 
 void trigger_reboot(const char *initiator, millis_t delay_ms = 0_ms);
 
@@ -176,3 +176,13 @@ i2c_cmd_handle_t i2c_master_prepare_write_read_device(uint8_t device_address,
 
 time_t get_localtime_midnight_in_utc(time_t timestamp);
 Option<time_t> get_localtime_today_midnight_in_utc();
+
+constexpr size_t constexpr_strnlen(const char *s, size_t maxlen) {
+    return (maxlen == 0 || s == nullptr || s[0] == '\0') ? 0
+            : (constexpr_strnlen(&s[1], maxlen - 1) + 1);
+}
+
+constexpr size_t constexpr_strlen(const char *s) {
+    return (s == nullptr || s[0] == '\0') ? 0
+            : (constexpr_strlen(&s[1]) + 1);
+}

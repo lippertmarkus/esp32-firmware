@@ -46,6 +46,7 @@ interface ChargersState {
     managementEnabled: boolean
     showExpert: boolean
     scanResult: Readonly<ScanCharger[]>
+    invalid: boolean
 //#if MODULE_EM_PHASE_SWITCHER_AVAILABLE
     emCharger: API.getType['em_phase_switcher/charger_config']
     emConfig: API.getType['energy_manager/config']
@@ -97,6 +98,11 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
             this.setState({emConfig: ev.data});
         });
 //#endif
+
+        this.state = {
+            ...this.state,
+            invalid: false,
+        };
     }
 
     addScanResults(result: ScanCharger[]) {
@@ -154,6 +160,11 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
 
     override async isSaveAllowed(cfg: ChargeManagerConfig): Promise<boolean> {
         if (API.hasModule("em_phase_switcher") && this.state.managementEnabled && cfg.chargers.length != 1) {
+            return false;
+        }
+
+        if (API.hasModule("em_common") && this.state.enable_charge_manager && cfg.chargers.length === 0) {
+            this.setState({invalid: true});
             return false;
         }
 
@@ -313,8 +324,7 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
         const ap_subnet = util.parseIP(API.get("wifi/ap_config").subnet);
         const ap_network = ap_ip & ap_subnet;
         const ap_broadcast =  (~ap_subnet) | ap_network;
-        if (API.get("wifi/ap_config").subnet != "255.255.255.254" && (v == this.intToIP(ap_network) || v == this.intToIP(ap_broadcast)))
-            return true;
+        return API.get("wifi/ap_config").subnet != "255.255.255.254" && (v == this.intToIP(ap_network) || v == this.intToIP(ap_broadcast))
     }
 
     render(props: {}, state: ChargeManagerConfig & ChargersState) {
@@ -350,11 +360,14 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
             ["2", translate_unchecked("charge_manager.content.mode_manager" + charge_manager_mode_suffix)],
         ];
 
+        let has_managed_mode = false;
+
         if (API.hasModule("evse_common") || API.hasModule("em_phase_switcher")) {
+            has_managed_mode = true;
             modes.splice(1, 0, ["1", translate_unchecked("charge_manager.content.mode_managed" + charge_manager_mode_suffix)]);
         }
 
-        let charge_manager_mode = <FormRow label={__("charge_manager.content.enable_charge_manager")} label_muted={__("charge_manager.content.enable_charge_manager_muted")}>
+        let charge_manager_mode = <FormRow label={__("charge_manager.content.enable_charge_manager")} help={__("charge_manager.content.enable_charge_manager_help")(has_managed_mode)}>
             <InputSelect
                     items={modes}
                     value={state.enable_charge_manager ? "2" : state.managementEnabled ? "1" : "0"}
@@ -377,13 +390,15 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                         this.setState({enable_charge_manager: v == "2", managementEnabled: mgmt_en})
                     }}
                 />
-                <div class="pt-3">
+                <div class="pt-2">
                     {translate_unchecked(`charge_manager.script.mode_explainer_${state.enable_charge_manager ? "2" : state.managementEnabled ? "1" : "0"}${charge_manager_mode_explainer_suffix}`)}
                 </div>
             </FormRow>
 
         let chargers = <FormRow label={__("charge_manager.content.managed_boxes")}>
                     <Table
+                        invalid={this.state.invalid}
+                        invalidFeedback={__("charge_manager.content.add_charger_invalid_feedback")}
                         columnNames={[__("charge_manager.content.table_charger_name"), __("charge_manager.content.table_charger_host"), __("charge_manager.content.table_charger_rotation")]}
                         rows={state.chargers.map((charger, i) =>
                             { return {
@@ -507,7 +522,7 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                             </FormRow>
                         </>]}
                         onAddSubmit={async () => {
-                            this.setState({chargers: state.chargers.concat(state.addCharger)});
+                            this.setState({chargers: state.chargers.concat(state.addCharger), invalid: false});
                             this.setDirty(true);
                         }}
                         onAddHide={async () => {

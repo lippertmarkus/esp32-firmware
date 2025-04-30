@@ -22,7 +22,7 @@ let x = {
         "content": {
             "sta_settings": "WiFi Connection",
             "sta_enable_sta": "WiFi connection enabled",
-            "sta_enable_sta_desc": <>Automatically connects to the configured network on start-up</>,
+            "sta_enable_sta_desc": <>Automatically connects to the configured network on start-up.</>,
             "sta_ssid": "Network name (SSID)",
             "sta_scan": "Search for networks",
             "sta_bssid": "BSSID",
@@ -35,13 +35,16 @@ let x = {
 
             "ap_settings": "WiFi Access Point",
             "ap_enable": "Access point",
-            "ap_enable_muted": <><a href="{{{manual_url}}}">see manual for details</a></>,
+            "ap_enable_help": <>
+                <p>The access-point can be run in two different modes: Always on, and only active in case no other network is available.</p>
+                <p><strong>We strongly advise to never switch it completely off, since you wont be able to access the device once the default network is unavailable.</strong></p>
+            </>,
             "ap_enabled": "Enabled",
             "ap_fallback_only": "As fallback only",
             "ap_disabled": "Disabled",
             "ap_ssid": "Network name (SSID)",
             "ap_hide_ssid": "Network name hidden",
-            "ap_hide_ssid_desc": /*FFN*/(bssid: string) => <>{__("The_device")} is reachable under the BSSID {bssid}.</>/*NF*/,
+            "ap_hide_ssid_desc": "Some devices cannot find hidden WiFis on channels 12 and 13.",
             "ap_passphrase": "Passphrase",
             "ap_channel": "Channel",
             "ap_channel_muted": "ignored if WiFi connection is active",
