@@ -529,31 +529,41 @@ export function unparseIP(ip: number) {
            ((ip >>> 0 ) & 0xFF).toString();
 }
 
+// Count the number of bits set in a 32 bit integer
+// https://graphics.stanford.edu/%7Eseander/bithacks.html#CountBitsSetParallel
+export function countBits(x: number) {
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    x = ((x + (x >> 4) & 0xF0F0F0F) * 0x1010101) >> 24;
+    return x;
+}
 
-export function downloadToFile(content: BlobPart, fileType: string, extension: string, contentType: string, timestamp?: Date) {
-    if (timestamp === undefined) {
-        timestamp = new Date();
-    }
-
+export function downloadToFile(content: BlobPart, filename: string, contentType: string) {
     const a = document.createElement('a');
     const file = new Blob([content], {type: contentType});
-    let timestamp_str = iso8601ButLocal(timestamp).replace(/:/gi, "-").replace(/\./gi, "-");
-    let name = API.get_unchecked('info/name')?.name ?? "unknown_uid";
-
-    let filename = name + "-" + fileType + "-" + timestamp_str + "." + extension;
-    filename = removeUnicodeHacks(filename);
-
     const url = URL.createObjectURL(file);
 
     if (is_native_median_app()) {
         Median.share.downloadFile({url: url});
     } else {
         a.href = url
-        a.download = filename;
+        a.download = removeUnicodeHacks(filename);
         a.click();
     }
 
     URL.revokeObjectURL(a.href);
+}
+
+export function downloadToTimestampedFile(content: BlobPart, fileType: string, extension: string, contentType: string, timestamp?: Date) {
+    if (timestamp === undefined) {
+        timestamp = new Date();
+    }
+
+    let timestamp_str = iso8601ButLocal(timestamp).replace(/:/gi, "-").replace(/\./gi, "-");
+    let name = API.get_unchecked('info/name')?.name ?? "unknown_uid";
+    let filename = name + "-" + fileType + "-" + timestamp_str + "." + extension;
+
+    downloadToFile(content, filename, contentType);
 }
 
 function timestamp_to_date(timestamp: number, time_fmt: any) {
@@ -596,7 +606,7 @@ export function timestamp_sec_to_date(timestamp_seconds: number, unsynced_string
     return timestamp_to_date(timestamp_seconds * 1000, {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 }
 
-export function upload(data: Blob, url: string, progress: (i: number) => void = i => {}, contentType?: string, timeout_ms: number = 5000) {
+export function upload(data: Blob, url: string, progress: (i: number) => void = i => {}, contentType?: string, timeout_ms: number = 10*1000) {
     const xhr = new XMLHttpRequest();
     progress(0);
 
@@ -604,7 +614,6 @@ export function upload(data: Blob, url: string, progress: (i: number) => void = 
 
     if (remoteAccessMode) {
         url = path + (url.startsWith("/") ? "" : "/") + url;
-        timeout_ms *= 2;
     }
 
     return new Promise<void>((resolve, reject) => {
@@ -644,11 +653,7 @@ export function upload(data: Blob, url: string, progress: (i: number) => void = 
     });
 }
 
-export async function download(url: string, timeout_ms: number = 5000) {
-    if (remoteAccessMode) {
-        timeout_ms *= 2;
-    }
-
+export async function download(url: string, timeout_ms: number = 10*1000) {
     let abort = new AbortController();
     let timeout = setTimeout(() => abort.abort(), timeout_ms);
 
@@ -669,11 +674,7 @@ export async function download(url: string, timeout_ms: number = 5000) {
     return await response.blob();
 }
 
-export async function put(url: string, payload: any, timeout_ms: number = 5000) {
-    if (remoteAccessMode) {
-        timeout_ms *= 2;
-    }
-
+export async function put(url: string, payload: any, timeout_ms: number = 10*1000) {
     let abort = new AbortController();
     let timeout = setTimeout(() => abort.abort(), timeout_ms);
 

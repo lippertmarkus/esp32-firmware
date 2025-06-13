@@ -20,6 +20,7 @@
 #include "firmware_update.h"
 
 #include <esp_app_format.h>
+#include <esp_rom_crc.h>
 #include <spi_flash_mmap.h>
 #include <Update.h>
 #include <TFJson.h>
@@ -28,21 +29,23 @@
 #include "module_dependencies.h"
 #include "tools.h"
 #include "build.h"
-#include "string_builder.h"
+#include "tools/string_builder.h"
+#include "tools/semantic_version.h"
 #include "check_state.enum.h"
-#include "./crc32.h"
+
+static const SemanticVersion build_version{BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH, BUILD_VERSION_BETA, build_timestamp()};
 
 // Newer firmwares contain a firmware info page.
 #define FIRMWARE_INFO_OFFSET (0xd000 - 0x1000)
 #define FIRMWARE_INFO_LENGTH 0x1000
-#define FIRMWARE_INFO_MAGIC_0 0x12CE2171
-#define FIRMWARE_INFO_MAGIC_1 0x6E12F0
+
+static const uint8_t firmware_info_magic[BLOCK_READER_MAGIC_LENGTH] = {0x71, 0x21, 0xCE, 0x12, 0xF0, 0x12, 0x6E};
 
 // Signed firmwares contain a signature info page.
 #define SIGNATURE_INFO_OFFSET (0xc000 - 0x1000)
 #define SIGNATURE_INFO_LENGTH 0x1000
-#define SIGNATURE_INFO_MAGIC_0 0xE6210F21
-#define SIGNATURE_INFO_MAGIC_1 0xEC1217
+
+static const uint8_t signature_info_magic[BLOCK_READER_MAGIC_LENGTH] = {0xE6, 0x21, 0x0F, 0x21, 0xEC, 0x12, 0x17};
 
 #define SIGNATURE_INFO_SIGNATURE_OFFSET (SIGNATURE_INFO_OFFSET + offsetof(signature_info_t, signature))
 #define SIGNATURE_INFO_SIGNATURE_LENGTH crypto_sign_BYTES
@@ -53,8 +56,6 @@
 // The first firmware slot (i.e. the one that is flashed over USB) starts at 0x10000.
 // So we have to skip the first 0x10000 - 0x1000 bytes, after them the actual firmware starts.
 #define FIRMWARE_OFFSET (0x10000 - 0x1000)
-
-#define MAX_VERSION_STRING_LENGTH 32
 
 #if !MODULE_CERTS_AVAILABLE()
 #define MAX_CERT_ID -1
@@ -103,7 +104,7 @@ static const char *get_partition_ota_state_name(const esp_partition_t *partition
     }
 }
 
-static bool read_custom_app_desc(const esp_partition_t *partition, build_custom_app_desc_t *custom_app_desc, char *version, size_t version_len)
+static bool read_custom_app_desc(const esp_partition_t *partition, build_custom_app_desc_t *custom_app_desc, char *fw_version, size_t fw_version_len)
 {
     esp_err_t err = esp_partition_read(partition,
                                        sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t),
@@ -125,16 +126,18 @@ static bool read_custom_app_desc(const esp_partition_t *partition, build_custom_
         return false;
     }
 
-    char beta[12] = "";
-
-    if (custom_app_desc->fw_version[3] != 255) {
-        snprintf(beta, ARRAY_SIZE(beta), "-beta.%u", custom_app_desc->fw_version[3]);
-    }
-
-    snprintf(version, version_len, "%u.%u.%u%s+%lx",
-             custom_app_desc->fw_version[0], custom_app_desc->fw_version[1], custom_app_desc->fw_version[2], beta, custom_app_desc->fw_build_time);
+    SemanticVersion{custom_app_desc->fw_version_major, custom_app_desc->fw_version_minor, custom_app_desc->fw_version_patch,
+                    custom_app_desc->fw_version_beta, custom_app_desc->fw_build_timestamp}.to_string(fw_version, fw_version_len);
 
     return true;
+}
+
+template <typename T>
+BlockReader<T>::BlockReader(size_t block_offset, size_t block_len, const uint8_t expected_magic[BLOCK_READER_MAGIC_LENGTH]) : block_offset(block_offset), block_len(block_len)
+{
+    memcpy(this->expected_magic, expected_magic, BLOCK_READER_MAGIC_LENGTH);
+
+    reset();
 }
 
 template <typename T>
@@ -171,7 +174,7 @@ bool BlockReader<T>::handle_chunk(size_t chunk_offset, uint8_t *chunk_data, size
             read_block_len += to_read;
         }
 
-        crc32_ieee_802_3_recalculate(start, len, &actual_checksum);
+        actual_checksum = esp_rom_crc32_le(actual_checksum, start, len);
 
         const size_t expected_checksum_offset = block_offset + block_len - 4;
 
@@ -195,16 +198,16 @@ bool BlockReader<T>::handle_chunk(size_t chunk_offset, uint8_t *chunk_data, size
             read_expected_checksum_len += to_read;
         }
 
-        block_found = read_expected_checksum_len == sizeof(expected_checksum) && actual_magic_0 == expected_magic_0 && (actual_magic_1 & 0x00FFFFFF) == expected_magic_1;
+        block_found = read_expected_checksum_len == sizeof(expected_checksum) && memcmp(block.magic, expected_magic, BLOCK_READER_MAGIC_LENGTH) == 0;
     }
 
     return chunk_offset + chunk_len >= block_offset + block_len;
 }
 
 FirmwareUpdate::FirmwareUpdate() :
-    firmware_info(FIRMWARE_INFO_OFFSET, FIRMWARE_INFO_LENGTH, FIRMWARE_INFO_MAGIC_0, FIRMWARE_INFO_MAGIC_1)
+    firmware_info(FIRMWARE_INFO_OFFSET, FIRMWARE_INFO_LENGTH, firmware_info_magic)
 #if signature_sodium_public_key_length != 0
-    , signature_info(SIGNATURE_INFO_OFFSET, SIGNATURE_INFO_LENGTH, SIGNATURE_INFO_MAGIC_0, SIGNATURE_INFO_MAGIC_1)
+    , signature_info(SIGNATURE_INFO_OFFSET, SIGNATURE_INFO_LENGTH, signature_info_magic)
 #endif
 {
 }
@@ -227,19 +230,19 @@ void FirmwareUpdate::pre_setup()
         {"publisher", Config::Str(signature_publisher, 0, strlen(signature_publisher))},
         {"check_timestamp", Config::Uint(0)},
         {"check_state", Config::Uint8(static_cast<uint8_t>(CheckState::Idle))},
-        {"update_version", Config::Str("", 0, MAX_VERSION_STRING_LENGTH)},
+        {"update_version", Config::Str("", 0, SEMANTIC_VERSION_MAX_STRING_LENGTH)},
         {"install_progress", Config::Uint(0, 0, 100)},
         {"install_state", Config::Uint8(static_cast<uint8_t>(InstallState::Idle))},
         {"running_partition", Config::Str("", 0, 16)},
         {"app0_state", Config::Uint(ESP_OTA_IMG_INVALID)},
-        {"app0_version", Config::Str("", 0, MAX_VERSION_STRING_LENGTH)},
+        {"app0_version", Config::Str("", 0, SEMANTIC_VERSION_MAX_STRING_LENGTH)},
         {"app1_state", Config::Uint(ESP_OTA_IMG_INVALID)},
-        {"app1_version", Config::Str("", 0, MAX_VERSION_STRING_LENGTH)},
-        {"rolled_back_version", Config::Str("", 0, MAX_VERSION_STRING_LENGTH)},
+        {"app1_version", Config::Str("", 0, SEMANTIC_VERSION_MAX_STRING_LENGTH)},
+        {"rolled_back_version", Config::Str("", 0, SEMANTIC_VERSION_MAX_STRING_LENGTH)},
     });
 
     install_firmware_config = ConfigRoot{Config::Object({
-        {"version", Config::Str("", 0, MAX_VERSION_STRING_LENGTH)},
+        {"version", Config::Str("", 0, SEMANTIC_VERSION_MAX_STRING_LENGTH)},
     }), [this](Config &update, ConfigSource source) -> String {
         SemanticVersion version;
 
@@ -318,41 +321,45 @@ InstallState FirmwareUpdate::check_firmware_info(bool detect_downgrade, bool log
             return InstallState::InfoPageCorrupted;
         }
 
-        firmware_info.block.firmware_name[ARRAY_SIZE(firmware_info.block.firmware_name) - 1] = '\0';
+        firmware_info.block.display_name[ARRAY_SIZE(firmware_info.block.display_name) - 1] = '\0';
+        firmware_info.block.name[ARRAY_SIZE(firmware_info.block.name) - 1] = '\0';
 
-        if (strcmp(BUILD_DISPLAY_NAME, firmware_info.block.firmware_name) != 0) {
+        if (firmware_info.block.version >= 3) {
+            if (strcmp(BUILD_NAME, firmware_info.block.name) != 0) {
+                if (log) {
+                    logger.printfln("Failed to update: Firmware is for %s but this is %s!",
+                                    firmware_info.block.name, BUILD_NAME);
+                }
+
+                return InstallState::WrongFirmwareType;
+            }
+        }
+        else if (strcmp(BUILD_DISPLAY_NAME, firmware_info.block.display_name) != 0) {
             if (log) {
                 logger.printfln("Failed to update: Firmware is for a %s but this is a %s!",
-                                firmware_info.block.firmware_name, BUILD_DISPLAY_NAME);
+                                firmware_info.block.display_name, BUILD_DISPLAY_NAME);
             }
 
             return InstallState::WrongFirmwareType;
         }
 
-        if (detect_downgrade && compare_version(firmware_info.block.fw_version[0], firmware_info.block.fw_version[1], firmware_info.block.fw_version[2],
-                                                firmware_info.block.fw_version_beta, firmware_info.block.fw_build_time,
-                                                BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH,
-                                                BUILD_VERSION_BETA, build_timestamp()) < 0) {
+        SemanticVersion fw_version{firmware_info.block.fw_version_major, firmware_info.block.fw_version_minor, firmware_info.block.fw_version_patch,
+                                   firmware_info.block.fw_version_beta, firmware_info.block.fw_build_timestamp};
+
+        if (detect_downgrade && fw_version.compare(build_version) < 0) {
             if (log) {
                 logger.printfln("Firmware is a downgrade!");
             }
 
             if (json_ptr != nullptr) {
-                char info_beta[12] = "";
-                char build_beta[12] = "";
+                char fw_version_str[SEMANTIC_VERSION_MAX_STRING_LENGTH] = "<unknown>";
 
-                if (firmware_info.block.fw_version_beta != 255) {
-                    snprintf(info_beta, ARRAY_SIZE(info_beta), "-beta.%u", firmware_info.block.fw_version_beta);
-                }
-
-                if (BUILD_VERSION_BETA != 255) {
-                    snprintf(build_beta, ARRAY_SIZE(build_beta), "-beta.%u", BUILD_VERSION_BETA);
-                }
+                fw_version.to_string(fw_version_str, ARRAY_SIZE(fw_version_str));
 
                 json_ptr->addObject();
                 json_ptr->addMemberNumber("error", static_cast<uint8_t>(InstallState::Downgrade));
-                json_ptr->addMemberStringF("firmware_version", "%u.%u.%u%s+%lx", firmware_info.block.fw_version[0], firmware_info.block.fw_version[1], firmware_info.block.fw_version[2], info_beta, firmware_info.block.fw_build_time);
-                json_ptr->addMemberStringF("installed_version", "%u.%u.%u%s+%lx", BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH, build_beta, build_timestamp());
+                json_ptr->addMemberString("firmware_version", fw_version_str);
+                json_ptr->addMemberString("installed_version", build_version_full_str());
                 json_ptr->endObject();
                 json_ptr->end();
             }
@@ -702,7 +709,7 @@ void FirmwareUpdate::register_urls()
                 install_state_to_json_error(result, &json);
             }
 
-            return request.send(400, "application/json", json_buf);
+            return request.send(400, "application/json", json_buf, json.buf_strlen);
         }
 
         return request.send(200, "text/plain", "Check OK");
@@ -713,7 +720,7 @@ void FirmwareUpdate::register_urls()
             TFJsonSerializer json{json_buf, sizeof(json_buf)};
 
             install_state_to_json_error(InstallState::VehicleConnected, &json);
-            request.send(400, "application/json", json_buf);
+            request.send(400, "application/json", json_buf, json.buf_strlen);
             return false;
         }
 
@@ -746,7 +753,7 @@ void FirmwareUpdate::register_urls()
             TFJsonSerializer json{json_buf, sizeof(json_buf)};
 
             install_state_to_json_error(InstallState::InfoPageTooBig, &json);
-            request.send(400, "application/json", json_buf);
+            request.send(400, "application/json", json_buf, json.buf_strlen);
             task_scheduler.await([this](){check_firmware_in_progress = false;});
             return false;
         }
@@ -800,7 +807,7 @@ void FirmwareUpdate::register_urls()
                 install_state_to_json_error(result, &json);
             }
 
-            request.send(400, "application/json", json_buf);
+            request.send(400, "application/json", json_buf, json.buf_strlen);
             task_scheduler.await([this](){flash_firmware_in_progress = false;});
             return false;
         }
@@ -1073,7 +1080,7 @@ void FirmwareUpdate::check_for_update()
                 state.get("check_state")->updateEnum(CheckState::NoCert);
                 break;
 
-            case AsyncHTTPSClientError::NoResponse:
+            case AsyncHTTPSClientError::Timeout:
                 logger.printfln("Update server %s did not respond", update_url.c_str());
                 state.get("check_state")->updateEnum(CheckState::NoResponse);
                 break;
@@ -1083,18 +1090,20 @@ void FirmwareUpdate::check_for_update()
                 state.get("check_state")->updateEnum(CheckState::DownloadShortRead);
                 break;
 
-            case AsyncHTTPSClientError::HTTPError:
-                logger.printfln("HTTP error while downloading firmware index");
+            case AsyncHTTPSClientError::HTTPError: {
+                char buf[204];
+                translate_HTTPError_detailed(event->error_handle, buf, ARRAY_SIZE(buf), true);
+                logger.printfln("Firmware index download failed: %s", buf);
                 state.get("check_state")->updateEnum(CheckState::DownloadError);
                 break;
-
+            }
             case AsyncHTTPSClientError::HTTPClientInitFailed:
                 logger.printfln("Error while creating HTTP client");
                 state.get("check_state")->updateEnum(CheckState::HTTPClientInitFailed);
                 break;
 
             case AsyncHTTPSClientError::HTTPClientError:
-                logger.printfln("Error while downloading firmware index: %s", esp_err_to_name(event->error_http_client));
+                logger.printfln("Error while downloading firmware index: %s (0x%lX)", esp_err_to_name(event->error_http_client), static_cast<uint32_t>(event->error_http_client));
                 state.get("check_state")->updateEnum(CheckState::DownloadError);
                 break;
 
@@ -1190,8 +1199,7 @@ void FirmwareUpdate::handle_index_data(const void *data, size_t data_len)
                 }
 
                 // ignore all versions that are older than the current version
-                if (compare_version(version.major, version.minor, version.patch, version.beta, version.timestamp,
-                                    BUILD_VERSION_MAJOR, BUILD_VERSION_MINOR, BUILD_VERSION_PATCH, BUILD_VERSION_BETA, build_timestamp()) <= 0) {
+                if (version.compare(build_version) <= 0) {
                     logger.printfln("No firmware update available");
                     state.get("check_state")->updateEnum(CheckState::Idle);
                     state.get("update_version")->updateString("");
@@ -1287,7 +1295,7 @@ void FirmwareUpdate::install_firmware(const char *url)
                 state.get("install_state")->updateEnum(InstallState::NoCert);
                 break;
 
-            case AsyncHTTPSClientError::NoResponse:
+            case AsyncHTTPSClientError::Timeout:
                 logger.printfln("Update server %s did not respond", update_url.c_str());
                 state.get("install_state")->updateEnum(InstallState::NoResponse);
                 break;
@@ -1382,13 +1390,13 @@ void FirmwareUpdate::read_app_partition_state()
     esp_ota_img_states_t app0_state = ESP_OTA_IMG_INVALID;
     const char *app0_state_name = "<unknown>";
     build_custom_app_desc_t app0_custom_desc;
-    char app0_version[MAX_VERSION_STRING_LENGTH + 1] = "<unknown>";
+    char app0_version[SEMANTIC_VERSION_MAX_STRING_LENGTH] = "<unknown>";
 
     bool app1_running = false;
     esp_ota_img_states_t app1_state = ESP_OTA_IMG_INVALID;
     const char *app1_state_name = "<unknown>";
     build_custom_app_desc_t app1_custom_desc;
-    char app1_version[MAX_VERSION_STRING_LENGTH + 1] = "<unknown>";
+    char app1_version[SEMANTIC_VERSION_MAX_STRING_LENGTH] = "<unknown>";
 
     const esp_partition_t *running_partition = esp_ota_get_running_partition();
 

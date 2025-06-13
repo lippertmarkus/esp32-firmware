@@ -126,7 +126,7 @@ void WS::register_urls()
         }
     });
 
-    web_sockets.start("/ws", "info/ws", server.httpd);
+    web_sockets.start("/ws", "/info/ws", server.httpd);
 
     task_scheduler.scheduleWithFixedDelay([this](){
         char *payload;
@@ -223,6 +223,11 @@ IAPIBackend::WantsStateUpdate WS::wantsStateUpdate(size_t stateIdx)
     return web_sockets.haveActiveClient() ?
            IAPIBackend::WantsStateUpdate::AsString :
            IAPIBackend::WantsStateUpdate::No;
+}
+
+bool WS::haveActiveClient()
+{
+    return web_sockets.haveActiveClient();
 }
 
 void WS::pre_reboot() {

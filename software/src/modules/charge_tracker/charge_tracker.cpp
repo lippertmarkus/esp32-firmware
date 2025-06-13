@@ -28,6 +28,8 @@
 #include "tools/fs.h"
 #include "pdf_charge_log.h"
 
+#define PDF_LETTERHEAD_MAX_SIZE 512
+
 struct [[gnu::packed]] ChargeStart {
     uint32_t timestamp_minutes = 0;
     float meter_start = 0.0f;
@@ -92,6 +94,10 @@ void ChargeTracker::pre_setup()
 
     config = Config::Object({
         {"electricity_price", Config::Uint16(0)}
+    });
+
+    pdf_letterhead_config = Config::Object({
+        {"letterhead", Config::Str("", 0, PDF_LETTERHEAD_MAX_SIZE)}
     });
 
 // #if MODULE_AUTOMATION_AVAILABLE()
@@ -473,6 +479,7 @@ void ChargeTracker::setup()
     repair_charges();
 
     api.restorePersistentConfig("charge_tracker/config", &config);
+    api.restorePersistentConfig("charge_tracker/pdf_letterhead_config", &pdf_letterhead_config);
 
     // Fill charge_tracker/last_charges
     bool charging = currentlyCharging();
@@ -560,6 +567,7 @@ static size_t get_display_name(uint8_t user_id, char *ret_buf, display_name_entr
         *dst++ = *src_start++;
     }
 
+    ret_buf[display_name_cache[user_id].length] = '\0';
     return display_name_cache[user_id].length;
 }
 
@@ -743,6 +751,7 @@ void ChargeTracker::register_urls()
     updateState();
 
     api.addPersistentConfig("charge_tracker/config", &config);
+    api.addPersistentConfig("charge_tracker/pdf_letterhead_config", &pdf_letterhead_config, {}, {"letterhead"});
 
     server.on_HTTPThread("/charge_tracker/charge_log", HTTP_GET, [this](WebServerRequest request) {
         std::lock_guard<std::mutex> lock{records_mutex};
@@ -796,15 +805,17 @@ void ChargeTracker::register_urls()
         uint32_t current_timestamp_min = rtc.timestamp_minutes();
 
         bool english = false;
-        #define LETTERHEAD_SIZE 512
-        auto letterhead = heap_alloc_array<char>(LETTERHEAD_SIZE);
+        auto letterhead = heap_alloc_array<char>(PDF_LETTERHEAD_MAX_SIZE + 1);
         int letterhead_lines = 0;
 
         {
             StaticJsonDocument<192> doc;
             auto buf = heap_alloc_array<char>(1024);
-            if (request.contentLength() > 1024)
+
+            if (request.contentLength() > 1024) {
                 return request.send(413);
+            }
+
             auto received = request.receive(buf.get(), 1024);
 
             if (received < 0) {
@@ -812,44 +823,78 @@ void ChargeTracker::register_urls()
             }
 
             DeserializationError error = deserializeJson(doc, buf.get(), received);
+
             if (error) {
-                String errorString = String("Failed to deserialize string: ") + error.c_str();
-                return request.send(400, "text/plain", errorString.c_str());
+                char error_string[64];
+                StringWriter sw(error_string, ARRAY_SIZE(error_string));
+                sw.puts("Failed to deserialize string: ");
+                sw.puts(error.c_str());
+                return request.send(400, "text/plain", error_string, static_cast<ssize_t>(sw.getLength()));
             }
-            if (!bool(doc["api_not_final_acked"]))
+
+            if (!bool(doc["api_not_final_acked"])) {
                 return request.send(400, "text/plain", "Please acknowledge that this API is subject to change!");
+            }
 
             user_filter = doc["user_filter"] | USER_FILTER_ALL_USERS;
             start_timestamp_min = doc["start_timestamp_min"] | 0l;
             end_timestamp_min = doc["end_timestamp_min"] | 0l;
             english = doc["english"] | false;
-            if (current_timestamp_min == 0)
+
+            if (current_timestamp_min == 0) {
                 current_timestamp_min = doc["current_timestamp_min"] | 0l;
+            }
+
+            const char *lh;
+            auto saved_letterhead = pdf_letterhead_config.get("letterhead");
+
             if (doc.containsKey("letterhead")) {
-                const char *lh = doc["letterhead"];
-                letterhead_lines = 1;
-                for (size_t i = 0; i < LETTERHEAD_SIZE; ++i) {
-                    if (lh[i] == '\0')
-                        break;
-                    if (lh[i] == '\n') {
-                        letterhead[i] = '\0';
-                        if (letterhead_lines == 6)
-                            break;
-                        ++letterhead_lines;
-                    }
-                    else
-                        letterhead[i] = lh[i];
+                lh = doc["letterhead"];
+
+                if (strlen(lh) > PDF_LETTERHEAD_MAX_SIZE) {
+                    return request.send(400, "text/plain", "Letterhead is too long!");
+                }
+
+                if (strcmp(saved_letterhead->asEphemeralCStr(), lh) != 0) {
+                    saved_letterhead->updateString(lh);
+                    API::writeConfig("charge_tracker/pdf_letterhead_config", &pdf_letterhead_config);
                 }
             }
+            else {
+                lh = saved_letterhead->asEphemeralCStr();
+            }
+
+            letterhead_lines = 1;
+
+            for (size_t i = 0; i < PDF_LETTERHEAD_MAX_SIZE; ++i) {
+                if (lh[i] == '\0') {
+                    break;
+                }
+
+                if (lh[i] == '\n') {
+                    letterhead[i] = '\0';
+
+                    if (letterhead_lines == 6) {
+                        break;
+                    }
+
+                    ++letterhead_lines;
+                }
+                else {
+                    letterhead[i] = lh[i];
+                }
+            }
+
+            letterhead[PDF_LETTERHEAD_MAX_SIZE] = '\0';
         }
 
-        char stats_buf[384];//55  9 "Wallbox: " + 32 display name + 13 " (warp2-AbCd)" + \0
-                            //31  13 "Exportiert am " + 17 (date time + \0)
-                            //55  22  "Exportierte Benutzer: " + 32 display name + \0
-                            //63  "Exportierter Zeitraum: Aufzeichnungsbeginn - Aufzeichnungsende" + \0
-                            //60  41 "Gesamtenergie exportierter Ladevorgänge: " + 19 "999.999.999,999kWh" + \0
-                            //50 "Gesamtbetrag 99999.99€ (Strompreis 123.45 ct/kWh)" + \0
-                            //= 314
+        char stats_buf[384];//55 9 "Wallbox: " + 32 display name + 13 " (warp2-AbCd)" + \0
+                            //31 13 "Exportiert am " + 17 (date time + \0)
+                            //55 22 "Exportierte Benutzer: " + 32 display name + \0
+                            //63 "Exportierter Zeitraum: Aufzeichnungsbeginn - Aufzeichnungsende" + \0
+                            //60 41 "Gesamtenergie exportierter Ladevorgänge: " + 17 "999999999,999 kWh" + \0
+                            //39 "Gesamtkosten: 9999,99 € (123,45 ct/kWh)" + \0
+                            //= 302
 
         double charged_sum = 0;
         uint32_t charged_cost_sum = 0;
@@ -945,7 +990,7 @@ search_done:
 
         display_name_entry *display_name_cache = static_cast<decltype(display_name_cache)>(malloc_32bit_addressed(MAX_PASSIVE_USERS * sizeof(display_name_cache[0])));
         if (!display_name_cache) {
-            return request.send(500, "text/plain", "Failed to generate PDF: No memory");;
+            return request.send(500, "text/plain", "Failed to generate PDF: No memory");
         }
 
         for (size_t i = 0; i < MAX_PASSIVE_USERS; i++) {
@@ -981,15 +1026,22 @@ search_done:
             stats_head += timestamp_min_to_date_time_string(stats_head, end_timestamp_min, english);
         ++stats_head;
 
-        int written = sprintf_u(stats_head, "%s: %9.3f kWh", english ? "Total energy of exported charges" : "Gesamtenergie exportierter Ladevorgänge", charged_sum);
-        if (!english)
-            for (int i = 0; i < written; ++i)
-                if (stats_head[i] == '.')
-                    stats_head[i] = ',';
-        stats_head += 1 + written;
+        stats_head += sprintf_u(stats_head, "%s: ", english ? "Total energy of exported charges" : "Gesamtenergie exportierter Ladevorgänge");
+        if (charged_sum <= 999999999.999f) {
+            int written = sprintf_u(stats_head, "%.3f kWh", charged_sum);
+            if (!english)
+                for (int i = 0; i < written; ++i)
+                    if (stats_head[i] == '.')
+                        stats_head[i] = ',';
+            stats_head += 1 + written;
+        }
+        else {
+            memcpy(stats_head, ">=1000000000 kWh", ARRAY_SIZE(">=1000000000 kWh"));
+            stats_head += ARRAY_SIZE(">=1000000000 kWh");
+        }
 
         if (electricity_price != 0) {
-            written = sprintf_u(stats_head, "%s: %ld.%02ld€ (%.2f ct/kWh)%s",
+            int written = sprintf_u(stats_head, "%s: %ld.%02ld€ (%.2f ct/kWh)%s",
                             english ? "Total cost" : "Gesamtkosten",
                             charged_cost_sum / 100, charged_cost_sum % 100,
                             electricity_price / 100.0f,
@@ -1009,12 +1061,12 @@ search_done:
         int current_charge = (first_charge > -1 ? first_charge : 0);
         last_file = (last_file >= 0) ? last_file : this->last_charge_record;
 
-#define TABLE_LINE_LEN (17 /*start date: 01.02.3456 12:34\0 or 3456-02-01 12:34\0*/ \
-                      + 33 /*display name: max 32 chars + \0*/ \
-                      + 8  /*charged: (assumed max) "999.999\0" kWh else truncated to "> 1000\0"*/ \
-                      + 11 /* charge duration max "9999:59:59\0"*/ \
-                      + 16 /* meter start max 99'999'999.999\0*/ \
-                      + 8) /* cost max 9999.99\0 else truncated to >10000*/
+#define TABLE_LINE_LEN (17 /* start date: 01.02.3456 12:34\0 or 3456-02-01 12:34\0 */ \
+                      + 33 /* display name: max 32 chars + \0 */ \
+                      + 8  /* charged: (assumed max) "999.999\0" kWh else truncated to "> 1000\0" */ \
+                      + 11 /* charge duration max "9999:59:59\0" */ \
+                      + 16 /* meter start max 99'999'999.999\0 */ \
+                      + 8) /* cost max 9999.99\0 else truncated to >10000 */
 
         char table_lines_buffer[8 * TABLE_LINE_LEN];
         File f;

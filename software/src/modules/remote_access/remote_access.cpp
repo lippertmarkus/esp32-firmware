@@ -113,22 +113,10 @@ fail:
     return false;
 }
 
-static int create_sock_and_send_to(const void *payload, size_t payload_len, const char *dest_host, uint16_t port, uint16_t *local_port)
+static int create_sock_and_send_to(const void *payload, size_t payload_len, const ip_addr_t ip, uint16_t port, uint16_t local_port)
 {
-    struct sockaddr_in dest_addr;
-    bzero(&dest_addr, sizeof(dest_addr));
-
-    ip_addr_t ip;
-    int ret = dns_gethostbyname_addrtype_lwip_ctx(dest_host, &ip, nullptr, nullptr, LWIP_DNS_ADDRTYPE_IPV4);
-    if (ret == ERR_VAL) {
-        logger.printfln("No DNS server is configured!");
-        return -1;
-    }
-
-    if (ret != ESP_OK || ip.type != IPADDR_TYPE_V4) {
-        return -1;
-    }
-
+    sockaddr_in dest_addr;
+    memset(&dest_addr, 0, sizeof(dest_addr));
     dest_addr.sin_addr.s_addr = ip.u_addr.ip4.addr;
     dest_addr.sin_family = AF_INET;
     dest_addr.sin_port = htons(port);
@@ -138,26 +126,28 @@ static int create_sock_and_send_to(const void *payload, size_t payload_len, cons
         logger.printfln("Remote Access: failed to send management frame");
         return sock;
     }
-    ret = fcntl(sock, F_SETFL, O_NONBLOCK);
+    int ret = fcntl(sock, F_SETFL, O_NONBLOCK);
     if (ret == -1) {
-        logger.printfln("Setting socket to non_blocking caused and error: (%i)%s", errno, strerror_r(errno, nullptr, 0));
+        char buf[100] = "<unknown>";
+        strerror_r(errno, buf, ARRAY_SIZE(buf));
+        logger.printfln("Setting socket to non_blocking caused and error: %s (%i)", buf, errno);
         close(sock);
         return -1;
     }
 
-    if (local_port != nullptr) {
-        struct sockaddr_in local_addr;
-        bzero(&local_addr, sizeof(local_addr));
+    struct sockaddr_in local_addr;
+    memset(&local_addr, 0, sizeof(local_addr));
 
-        local_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
-        local_addr.sin_family = AF_INET;
-        local_addr.sin_port = htons(*local_port);
-        ret = bind(sock, (struct sockaddr *)&local_addr, sizeof(local_addr));
-        if (ret == -1) {
-            logger.printfln("Binding socket to port %u caused and error: (%i)%s", *local_port, errno, strerror_r(errno, nullptr, 0));
-            close(sock);
-            return -1;
-        }
+    //local_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // address already set by memset
+    local_addr.sin_family = AF_INET;
+    local_addr.sin_port = htons(local_port);
+    ret = bind(sock, (struct sockaddr *)&local_addr, sizeof(local_addr));
+    if (ret == -1) {
+        char buf[100] = "<unknown>";
+        strerror_r(errno, buf, ARRAY_SIZE(buf));
+        logger.printfln("Binding socket to port %u caused and error: %s (%i)", local_port, buf, errno);
+        close(sock);
+        return -1;
     }
 
     ret = sendto(sock, payload, payload_len, 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
@@ -201,6 +191,12 @@ void RemoteAccess::pre_setup()
         // unix timestamp
         {"last_state_change", Config::Uint53(0)},
     });
+
+    ping_state = ConfigRoot{Config::Object({
+        {"packets_sent", Config::Uint32(0)},
+        {"packets_received", Config::Uint32(0)},
+        {"time_elapsed_ms", Config::Uint32(0)},
+    })};
 
     connection_state =
         Config::Array({}, &connection_state_prototype, MAX_KEYS_PER_USER + 1, MAX_KEYS_PER_USER + 1, Config::type_id<Config::ConfUint>());
@@ -257,12 +253,38 @@ void RemoteAccess::register_urls()
 
     api.addState("remote_access/state", &connection_state);
     api.addState("remote_access/registration_state", &registration_state);
+    api.addState("remote_access/ping_state", &ping_state);
 
     server.on("/remote_access/reset_registration_state", HTTP_PUT, [this](WebServerRequest request) {
         registration_state.get("state")->updateEnum<RegistrationState>(RegistrationState::None);
         registration_state.get("message")->updateString("");
         return request.send(200);
     });
+
+    api.addCommand(
+        "remote_access/start_ping",
+        Config::Null(),
+        {},
+        [this](String & err) {
+            if (ping != nullptr) {
+                err = "Ping already started";
+                return;
+            }
+            int start_err = start_ping();
+            if (start_err != 0) {
+                err = "Failed to start ping: " + String(start_err);
+            }
+        },
+        true);
+
+    api.addCommand(
+        "remote_access/stop_ping",
+        Config::Null(),
+        {},
+        [this](String & /*errmsg*/) {
+            stop_ping();
+        },
+        true);
 
     api.addCommand(
         "remote_access/config_update",
@@ -628,6 +650,9 @@ void RemoteAccess::register_urls()
                     break;
             }
         }
+
+        registration_state.get("message")->updateString("");
+        registration_state.get("state")->updateEnum<RegistrationState>(RegistrationState::InProgress);
 
         uint8_t public_key[50];
         mbedtls_base64_encode(public_key, 50, &olen, (uint8_t *)pk, crypto_box_PUBLICKEYBYTES);
@@ -1048,18 +1073,22 @@ void RemoteAccess::register_events()
     if (!config.get("enable")->asBool())
         return;
 
-    event.registerEvent("network/state", {"connected"}, [this](const Config *connected) {
-        task_scheduler.cancel(this->task_id);
-
+    network.on_network_connected([this](const Config *connected) {
         if (connected->asBool()) {
-            this->task_id = task_scheduler.scheduleWithFixedDelay(
-                [this]() {
+            // Start task if not scheduled yet.
+            if (!this->task_id) {
+                this->task_id = task_scheduler.scheduleWithFixedDelay([this]() {
                     if (!this->management_request_done) {
                         this->resolve_management();
                     }
-                },
-                0_s,
-                30_s);
+                }, 30_s);
+            }
+        } else {
+            // Cancel task if currently scheduled.
+            if (this->task_id) {
+                task_scheduler.cancel(this->task_id);
+                this->task_id = 0;
+            }
         }
         return EventResult::OK;
     });
@@ -1083,7 +1112,7 @@ void RemoteAccess::run_request_with_next_stage(const char *url,
                                                ConfigRoot config,
                                                std::function<void(ConfigRoot config)> &&next_stage)
 {
-    response_body = String();
+    response_body.clear();
 
     const String url_capture = String(url);
     std::function<void(AsyncHTTPSClientEvent * event)> callback = [this, next_stage, config, url_capture](AsyncHTTPSClientEvent *event) {
@@ -1127,7 +1156,7 @@ void RemoteAccess::run_request_with_next_stage(const char *url,
                         this->cleanup_after();
                         break;
                 }
-                response_body = String();
+                response_body.clear();
                 break;
 
             case AsyncHTTPSClientEventType::Aborted:
@@ -1186,7 +1215,7 @@ void RemoteAccess::parse_login_salt(ConfigRoot config)
         for (int i = 0; i < 48; i++) {
             login_salt[i] = doc[i].as<uint8_t>();
         }
-        response_body = "";
+        response_body.clear();
     }
 
     char base64[65] = {};
@@ -1229,7 +1258,7 @@ void RemoteAccess::login(ConfigRoot config, CoolString &login_key)
     run_request_with_next_stage(url, HTTP_METHOD_POST, body.c_str(), body.length(), config, [this](ConfigRoot cfg) {
         registration_state.get("message")->updateString("");
         registration_state.get("state")->updateEnum<RegistrationState>(RegistrationState::Success);
-        response_body = "";
+        response_body.clear();
     });
 }
 
@@ -1263,7 +1292,7 @@ void RemoteAccess::parse_secret(ConfigRoot config)
             this->request_cleanup();
             return;
         }
-        response_body = "";
+        response_body.clear();
     }
 
     encrypted_secret = heap_alloc_array<uint8_t>(crypto_box_SECRETKEYBYTES + crypto_secretbox_MACBYTES);
@@ -1467,7 +1496,7 @@ void RemoteAccess::resolve_management()
                     this->request_cleanup();
                     return;
                 }
-                response_body = "";
+                response_body.clear();
             }
             config.get("uuid")->updateString(resp["uuid"]);
             api.writeConfig("remote_access/config", &config);
@@ -1486,7 +1515,7 @@ void RemoteAccess::resolve_management()
                 this->request_cleanup();
                 return;
             }
-            response_body = "";
+            response_body.clear();
         }
 
             bool changed = false;
@@ -1576,9 +1605,9 @@ bool port_valid(uint16_t port)
     }
 
     struct sockaddr_in local_addr;
-    bzero(&local_addr, sizeof(local_addr));
+    memset(&local_addr, 0, sizeof(local_addr));
 
-    local_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+    //local_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // address already set by memset
     local_addr.sin_family = AF_INET;
     local_addr.sin_port = htons(port);
     int ret = bind(sock, (struct sockaddr *)&local_addr, sizeof(local_addr));
@@ -1602,15 +1631,17 @@ void RemoteAccess::request_cleanup()
     https_client = nullptr;
     encrypted_secret = nullptr;
     secret_nonce = nullptr;
-    response_body = "";
+    response_body.clear();
     management_request_allowed = true;
 }
 
 void RemoteAccess::connect_management()
 {
     static bool done = false;
-    if (done)
+    if (done) {
+        logger.printfln("Attempted connect_management again despite being done");
         return;
+    }
 
     struct timeval tv;
     if (!rtc.clock_synced(&tv)) {
@@ -1624,19 +1655,11 @@ void RemoteAccess::connect_management()
 
     done = true;
 
-    IPAddress internal_ip;
-    IPAddress internal_subnet;
-    IPAddress internal_gateway;
-    IPAddress allowed_ip;
-    IPAddress allowed_subnet;
-    uint16_t local_port;
-
-    internal_ip.fromString("10.123.123.2");
-    internal_subnet.fromString("255.255.255.0");
-    internal_gateway.fromString("10.123.123.1");
-    allowed_ip.fromString("0.0.0.0");
-    allowed_subnet.fromString("0.0.0.0");
-    local_port = 51820;
+    const IPAddress internal_ip     { 10,123,123,2};
+    const IPAddress internal_subnet {255,255,255,0};
+    const IPAddress internal_gateway{ 10,123,123,1};
+    const IPAddress allowed_ip      (IPv4); // 0.0.0.0
+    const IPAddress allowed_subnet  (IPv4); // 0.0.0.0
 
     // WireGuard decodes those (base64 encoded) keys and stores them.
     char private_key[WG_KEY_LENGTH + 1];
@@ -1649,7 +1672,7 @@ void RemoteAccess::connect_management()
     }
 
     // Only used for BLOCKING! DNS resolve. TODO Make this non-blocking in Wireguard-ESP32-Arduino/src/WireGuard.cpp!
-    auto remote_host = config.get("relay_host")->asEphemeralCStr();
+    const char *remote_host = config.get("relay_host")->asUnsafeCStr();
 
     logger.printfln("Connecting to Management WireGuard peer %s:%u", remote_host, 51820);
 
@@ -1658,7 +1681,7 @@ void RemoteAccess::connect_management()
     }
     management = new WireGuard();
 
-    local_port = find_next_free_port(local_port);
+    const uint16_t local_port = find_next_free_port(51820);
     this->setup_inner_socket();
     management->begin(internal_ip,
                       internal_subnet,
@@ -1694,24 +1717,11 @@ void RemoteAccess::connect_remote_access(uint8_t i, uint16_t local_port)
         return;
     }
 
-    IPAddress internal_ip;
-    IPAddress internal_subnet;
-    IPAddress internal_gateway;
-    IPAddress allowed_ip;
-    IPAddress allowed_subnet;
-
-    std::unique_ptr<char[]> buf = heap_alloc_array<char>(50);
-
-    // TODO: make this more efficient. For example (internal_ip.fromString("10.123.0.2") | i << 8). Maybe there is a macro that converts dotted decimal form to an int?
-    snprintf(buf.get(), 50, "10.123.%u.2", i);
-    internal_ip.fromString(buf.get());
-    internal_subnet.fromString("255.255.255.0");
-
-    // TODO: make this more efficient, see above.
-    snprintf(buf.get(), 50, "10.123.%u.1", i);
-    internal_gateway.fromString(buf.get());
-    allowed_ip.fromString("0.0.0.0");
-    allowed_subnet.fromString("0.0.0.0");
+    const IPAddress internal_ip     { 10,123,  i,2};
+    const IPAddress internal_subnet {255,255,255,0};
+    const IPAddress internal_gateway{ 10,123,  i,1};
+    const IPAddress allowed_ip      (IPv4); // 0.0.0.0
+    const IPAddress allowed_subnet  (IPv4); // 0.0.0.0
 
     // WireGuard decodes those (base64 encoded) keys and stores them.
     char private_key[WG_KEY_LENGTH + 1];
@@ -1726,7 +1736,7 @@ void RemoteAccess::connect_remote_access(uint8_t i, uint16_t local_port)
     }
 
     // Only used for BLOCKING! DNS resolve. TODO Make this non-blocking in Wireguard-ESP32-Arduino/src/WireGuard.cpp!
-    auto remote_host = config.get("relay_host")->asEphemeralCStr();
+    const char *remote_host = config.get("relay_host")->asUnsafeCStr();
 
     uint8_t conn_idx = get_connection(i);
     if (conn_idx == 255) {
@@ -1764,19 +1774,23 @@ void RemoteAccess::setup_inner_socket()
 
     inner_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (inner_socket < 0) {
-        logger.printfln("Failed to create inner socket: (%i)%s", errno, strerror_r(errno, nullptr, 0));
+        char buf[100] = "<unknown>";
+        strerror_r(errno, buf, ARRAY_SIZE(buf));
+        logger.printfln("Failed to create inner socket: %s (%i)", buf, errno);
         return;
     }
 
     struct sockaddr_in local_addr;
-    bzero(&local_addr, sizeof(local_addr));
+    memset(&local_addr, 0, sizeof(local_addr));
 
-    local_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+    //local_addr.sin_addr.s_addr = inet_addr("0.0.0.0"); // address is already set by memset
     local_addr.sin_family = AF_INET;
     local_addr.sin_port = htons(12345);
     int ret = bind(inner_socket, (struct sockaddr *)&local_addr, sizeof(local_addr));
     if (ret == -1) {
-        logger.printfln("Binding socket to port 12345 caused and error: (%i)%s", errno, strerror_r(errno, nullptr, 0));
+        char buf[100] = "<unknown>";
+        strerror_r(errno, buf, ARRAY_SIZE(buf));
+        logger.printfln("Binding socket to port 12345 caused and error: %s (%i)", buf, errno);
         close(inner_socket);
         inner_socket = -1;
         return;
@@ -1784,7 +1798,9 @@ void RemoteAccess::setup_inner_socket()
 
     ret = fcntl(inner_socket, F_SETFL, O_NONBLOCK);
     if (ret == -1) {
-        logger.printfln("Setting socket to non_blocking caused and error: (%i)%s", errno, strerror_r(errno, nullptr, 0));
+        char buf[100] = "<unknown>";
+        strerror_r(errno, buf, ARRAY_SIZE(buf));
+        logger.printfln("Setting socket to non_blocking caused and error: %s (%i)", buf, errno);
         close(inner_socket);
         inner_socket = -1;
     }
@@ -1883,8 +1899,12 @@ void RemoteAccess::run_management()
                 (*conn)->end();
             }
             local_port = find_next_free_port(local_port);
-            create_sock_and_send_to(&response, sizeof(response), remote_host.c_str(), 51820, &local_port);
-            connect_remote_access(command->connection_no, local_port);
+
+            uint8_t conn_no = command->connection_no;
+            dns_gethostbyname_addrtype_lwip_ctx_async(remote_host.c_str(), [this, response, local_port, conn_no](dns_gethostbyname_addrtype_lwip_ctx_async_data *data) {
+                create_sock_and_send_to(&response, sizeof(response), data->addr, 51820, local_port);
+                connect_remote_access(conn_no, local_port);
+            }, LWIP_DNS_ADDRTYPE_IPV4);
         } break;
 
         case management_command_id::Disconnect:
@@ -1924,4 +1944,126 @@ void RemoteAccess::close_all_remote_connections() {
             connection_state.get(i + 1)->get("last_state_change")->updateUint53(now.tv_sec);
         }
     }
+}
+
+static void on_ping_success(esp_ping_handle_t handle, void *args) {
+    uint8_t ttl;
+    uint8_t seqno;
+    uint32_t elapsed_time, recv_len;
+    ip_addr_t target_addr;
+
+    esp_ping_get_profile(handle, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(handle, ESP_PING_PROF_TTL, &ttl, sizeof(ttl));
+    esp_ping_get_profile(handle, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    esp_ping_get_profile(handle, ESP_PING_PROF_SIZE, &recv_len, sizeof(recv_len));
+    esp_ping_get_profile(handle, ESP_PING_PROF_TIMEGAP, &elapsed_time, sizeof(elapsed_time));
+    logger.printfln("Ping: seqno=%u, ttl=%u, elapsed_time=%lu ms, recv_len=%lu bytes", seqno, ttl, elapsed_time, recv_len);
+
+    PingArgs *ping_args = static_cast<PingArgs *>(args);
+    ping_args->packets_sent++;
+    ping_args->packets_received++;
+    task_scheduler.scheduleOnce(
+        [ping_args]() {
+            ConfigRoot &ping_state = ping_args->that->get_ping_state();
+
+            ping_state.get("packets_sent")->updateUint(ping_args->packets_sent);
+            ping_state.get("packets_received")->updateUint(ping_args->packets_received);
+            ping_state.get("time_elapsed_ms")->updateUint(millis() - ping_args->that->get_ping_start());
+        },
+    0_ms);
+}
+
+static void on_ping_timeout(esp_ping_handle_t handle, void *args) {
+    uint8_t seqno;
+    ip_addr_t target_addr;
+
+    esp_ping_get_profile(handle, ESP_PING_PROF_SEQNO, &seqno, sizeof(seqno));
+    esp_ping_get_profile(handle, ESP_PING_PROF_IPADDR, &target_addr, sizeof(target_addr));
+    logger.printfln("Ping timeout: seqno=%u", seqno);
+
+    PingArgs *ping_args = static_cast<PingArgs *>(args);
+    ping_args->packets_sent++;
+    task_scheduler.scheduleOnce(
+        [ping_args]() {
+            ConfigRoot &ping_state = ping_args->that->get_ping_state();
+
+            ping_state.get("packets_sent")->updateUint(ping_args->packets_sent);
+            ping_state.get("packets_received")->updateUint(ping_args->packets_received);
+            ping_state.get("time_elapsed_ms")->updateUint(millis() - ping_args->that->get_ping_start());
+        },
+    0_ms);
+}
+
+static void on_ping_end(esp_ping_handle_t handle, void *args) {
+    uint32_t transmitted;
+    uint32_t received;
+    uint32_t total_time_ms;
+
+    esp_ping_get_profile(handle, ESP_PING_PROF_REQUEST, &transmitted, sizeof(transmitted));
+    esp_ping_get_profile(handle, ESP_PING_PROF_REPLY, &received, sizeof(received));
+    esp_ping_get_profile(handle, ESP_PING_PROF_DURATION, &total_time_ms, sizeof(total_time_ms));
+    logger.printfln("Ping end: packets transmitted=%lu, received=%lu, total_time_ms=%lu", transmitted, received, total_time_ms);
+
+    PingArgs *ping_args = static_cast<PingArgs *>(args);
+    task_scheduler.scheduleOnce(
+        [ping_args, transmitted, received]() {
+            ConfigRoot &ping_state = ping_args->that->get_ping_state();
+
+            uint32_t ping_start = ping_args->that->get_ping_start();
+            uint32_t now = millis();
+
+            ping_state.get("packets_sent")->updateUint(transmitted);
+            ping_state.get("packets_received")->updateUint(received);
+            ping_state.get("time_elapsed_ms")->updateUint(static_cast<uint32_t>(now - ping_start));
+
+            delete ping_args;
+        },
+    0_s);
+}
+
+int RemoteAccess::start_ping() {
+    const char *host = config.get("relay_host")->asEphemeralCStr();
+
+    dns_gethostbyname_addrtype_lwip_ctx_async(host, [this, host](dns_gethostbyname_addrtype_lwip_ctx_async_data *data) {
+        PingArgs *ping_args = new PingArgs();
+        ping_args->that = this;
+
+        esp_ping_config_t ping_config = ESP_PING_DEFAULT_CONFIG();
+        ping_config.target_addr = data->addr;
+        ping_config.count = ESP_PING_COUNT_INFINITE;
+
+        esp_ping_callbacks_t cbs;
+        cbs.on_ping_success = on_ping_success;
+        cbs.on_ping_timeout = on_ping_timeout;
+        cbs.on_ping_end = on_ping_end;
+        cbs.cb_args = static_cast<void *>(ping_args);
+        esp_ping_new_session(&ping_config, &cbs, &ping);
+        esp_ping_start(ping);
+
+        ping_start = millis();
+
+        char str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &data->addr, str, sizeof(str));
+        logger.printfln("Start pinging %s(%s)", host, str);
+    }, LWIP_DNS_ADDRTYPE_IPV4);
+
+    return 0;
+}
+
+int RemoteAccess::stop_ping() {
+    if (ping != nullptr) {
+        esp_ping_stop(ping);
+        esp_ping_delete_session(ping);
+        ping = nullptr;
+    }
+
+    return 0;
+}
+
+ConfigRoot &RemoteAccess::get_ping_state() {
+    return ping_state;
+}
+
+uint32_t RemoteAccess::get_ping_start() {
+    return ping_start;
 }

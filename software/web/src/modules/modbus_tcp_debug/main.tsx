@@ -93,7 +93,7 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                 result = "Error: " + transact_result.error;
             }
             else if (transact_result.read_data !== null) {
-                let header = " Addr  Off   Hex   UInt";
+                let header = " Addr  Off   Hex  AS    U16     S16       U32BE       U32LE        S32BE        S32LE                 U64BE                 U64LE                  S64BE                  S64LE ";
 
                 result = header + "\n";
 
@@ -107,14 +107,69 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                     r_pad = r_pad.substring(r_pad.length - 3);
 
                     let hex = transact_result.read_data.substring(r * 4, r * 4 + 4);
-                    let int_pad = "    " + parseInt(hex, 16);
-
-                    int_pad = int_pad.substring(int_pad.length - 5);
 
                     let ascii_0 = printable_ascii(parseInt(hex.substring(0, 2), 16));
                     let ascii_1 = printable_ascii(parseInt(hex.substring(2, 4), 16));
 
-                    result += "\n" + a_pad + "  " + r_pad + "  " + hex + "  " + int_pad + "  " + ascii_0 + ascii_1;
+                    let u16 = parseInt(hex, 16);
+                    let u16_pad = "    " + u16;
+
+                    u16_pad = u16_pad.substring(u16_pad.length - 5);
+
+                    let s16 = (u16 << 16) >> 16;
+                    let s16_pad = "     " + s16;
+
+                    s16_pad = s16_pad.substring(s16_pad.length - 6);
+
+                    let u32be_pad = "          ";
+                    let u32le_pad = "          ";
+                    let s32be_pad = "           ";
+                    let s32le_pad = "           ";
+
+                    if ((r % 2) == 1) {
+                        let u32be = parseInt(transact_result.read_data.substring((r - 1) * 4,     (r - 1) * 4 + 8), 16);
+                        let u32le = parseInt(transact_result.read_data.substring((r - 1) * 4 + 4, (r - 1) * 4 + 8) +
+                                             transact_result.read_data.substring((r - 1) * 4,     (r - 1) * 4 + 4), 16);
+                        let s32be = u32be >> 0;
+                        let s32le = u32le >> 0;
+
+                        u32be_pad += u32be;
+                        u32le_pad += u32le;
+                        s32be_pad += s32be;
+                        s32le_pad += s32le;
+                    }
+
+                    u32be_pad = u32be_pad.substring(u32be_pad.length - 10);
+                    u32le_pad = u32le_pad.substring(u32le_pad.length - 10);
+                    s32be_pad = s32be_pad.substring(s32be_pad.length - 11);
+                    s32le_pad = s32le_pad.substring(s32le_pad.length - 11);
+
+                    let u64be_pad = "                    ";
+                    let u64le_pad = "                    ";
+                    let s64be_pad = "                     ";
+                    let s64le_pad = "                     ";
+
+                    if ((r % 4) == 3) {
+                        let u64be = BigInt("0x" + transact_result.read_data.substring((r - 3) * 4,      (r - 3) * 4 + 16));
+                        let u64le = BigInt("0x" + transact_result.read_data.substring((r - 3) * 4 + 12, (r - 3) * 4 + 16) +
+                                                  transact_result.read_data.substring((r - 3) * 4 + 8,  (r - 3) * 4 + 12) +
+                                                  transact_result.read_data.substring((r - 3) * 4 + 4,  (r - 3) * 4 + 8) +
+                                                  transact_result.read_data.substring((r - 3) * 4,      (r - 3) * 4 + 4));
+                        let s64be = BigInt.asIntN(64, u64be);
+                        let s64le = BigInt.asIntN(64, u64le);
+
+                        u64be_pad += u64be.toString();
+                        u64le_pad += u64le.toString();
+                        s64be_pad += s64be.toString();
+                        s64le_pad += s64le.toString();
+                    }
+
+                    u64be_pad = u64be_pad.substring(u64be_pad.length - 20);
+                    u64le_pad = u64le_pad.substring(u64le_pad.length - 20);
+                    s64be_pad = s64be_pad.substring(s64be_pad.length - 21);
+                    s64le_pad = s64le_pad.substring(s64le_pad.length - 21);
+
+                    result += "\n" + a_pad + "  " + r_pad + "  " + hex + "  " + ascii_0 + ascii_1 + "  " + u16_pad + "  " + s16_pad + "  " + u32be_pad + "  " + u32le_pad + "  " + s32be_pad + "  " + s32le_pad + "  " + u64be_pad + "  " + u64le_pad + "  " + s64be_pad + "  " + s64le_pad + " ";
 
                     if (r % 20 == 19 && r < transact_result.read_data.length / 4 - 1) {
                         result += "\n\n" + header + "\n";
@@ -142,11 +197,30 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                         let values_hex: string[] = [];
 
                         if (this.state.function_code == 6 || this.state.function_code == 16) {
-                            for (let value_dec of this.state.write_data.split(",")) {
-                                let value = parseInt(value_dec);
+                            let values_dec = this.state.write_data.split(",");
+
+                            if (values_dec.length >= 123 /* 1968 for coils */) {
+                                this.setState({waiting: false, cookie: null, result: "Error: Too many values"});
+                                return;
+                            }
+
+                            for (let value_dec of values_dec) {
+                                value_dec = value_dec.trim();
+
+                                let value = parseInt(value_dec, 10);
+
+                                if (isNaN(value)) {
+                                    this.setState({waiting: false, cookie: null, result: "Error: Value is invalid"});
+                                    return;
+                                }
 
                                 if (value > 65535) {
-                                    this.setState({waiting: false, cookie: null, result: "Error: Value too big"});
+                                    this.setState({waiting: false, cookie: null, result: "Error: Value is too big"});
+                                    return;
+                                }
+
+                                if ("" + value !== value_dec) {
+                                    this.setState({waiting: false, cookie: null, result: "Error: Value is malformed"});
                                     return;
                                 }
 
@@ -189,12 +263,14 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
             <FormRow label={__("modbus_tcp_debug.content.host")}>
                 <InputHost
                     required
+                    disabled={this.state.waiting}
                     value={this.state.host}
                     onValue={(v) => this.setState({host: v})} />
             </FormRow>
             <FormRow label={__("modbus_tcp_debug.content.port")} label_muted={__("modbus_tcp_debug.content.port_muted")}>
                 <InputNumber
                     required
+                    disabled={this.state.waiting}
                     min={1}
                     max={65535}
                     value={this.state.port}
@@ -203,6 +279,7 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
             <FormRow label={__("modbus_tcp_debug.content.device_address")}>
                 <InputNumber
                     required
+                    disabled={this.state.waiting}
                     min={0}
                     max={255}
                     value={this.state.device_address}
@@ -211,6 +288,7 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
             <FormRow label={__("modbus_tcp_debug.content.function_code")}>
                 <InputSelect
                     required
+                    disabled={this.state.waiting}
                     items={[
                         ["3", __("modbus_tcp_debug.content.function_code_read_holding_registers")],
                         ["4", __("modbus_tcp_debug.content.function_code_read_input_registers")],
@@ -224,6 +302,7 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
             <FormRow label={__("modbus_tcp_debug.content.start_address")} label_muted={__("modbus_tcp_debug.content.start_address_muted")}>
                 <InputNumber
                     required
+                    disabled={this.state.waiting}
                     min={0}
                     max={65535}
                     value={this.state.start_address}
@@ -234,8 +313,9 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                 <FormRow label={__("modbus_tcp_debug.content.data_count")}>
                     <InputNumber
                         required
+                        disabled={this.state.waiting}
                         min={1}
-                        max={65535 /* FIXME: depends on function code */}
+                        max={125 /* 2000 for coils */}
                         value={this.state.data_count}
                         onValue={(v) => this.setState({data_count: v})} />
                 </FormRow>
@@ -245,7 +325,8 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                 <FormRow label={__("modbus_tcp_debug.content.write_data_single_register")}>
                     <InputTextPatterned
                         required
-                        pattern="^[0-9]+$"
+                        disabled={this.state.waiting}
+                        pattern="^ *(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}|0) *$"
                         value={this.state.write_data}
                         onValue={(v) => this.setState({write_data: v})}
                         invalidFeedback={__("modbus_tcp_debug.content.write_data_single_register_invalid")}
@@ -257,7 +338,8 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
                 <FormRow label={__("modbus_tcp_debug.content.write_data_multiple_registers")} label_muted={__("modbus_tcp_debug.content.write_data_multiple_registers_muted")}>
                     <InputTextPatterned
                         required
-                        pattern="^[0-9]+(,[0-9]+)*$"
+                        disabled={this.state.waiting}
+                        pattern="^ *(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}|0) *(, *(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}|0) *){0,122}$"
                         value={this.state.write_data}
                         onValue={(v) => this.setState({write_data: v})}
                         invalidFeedback={__("modbus_tcp_debug.content.write_data_multiple_registers_invalid")}
@@ -268,16 +350,20 @@ export class ModbusTCPDebugTool extends Component<{}, ModbusTCPDebugToolState> {
             <FormRow label={__("modbus_tcp_debug.content.transact_timeout")}>
                 <InputNumber
                     required
+                    disabled={this.state.waiting}
                     value={this.state.timeout}
                     onValue={(v) => this.setState({timeout: v})}
                     unit="ms" />
             </FormRow>
             <FormRow label="">
-                <Button variant="primary" className="form-control" type="submit">{__("modbus_tcp_debug.content.execute")}</Button>
+                <Button variant="primary" className="form-control" type="submit" disabled={this.state.waiting}>{__("modbus_tcp_debug.content.execute")}</Button>
             </FormRow>
-            <FormRow label={__("modbus_tcp_debug.content.response")}>
-                <OutputTextarea rows={15} resize="vertical" value={this.state.waiting ? "Waiting..." : this.state.result} />
-            </FormRow>
+
+            {this.state.waiting || this.state.result.length > 0 ?
+                <FormRow label={__("modbus_tcp_debug.content.response")}>
+                    <OutputTextarea rows={15} resize="vertical" value={this.state.waiting ? "Waiting..." : this.state.result} />
+                </FormRow>
+                : undefined}
         </form>;
     }
 }

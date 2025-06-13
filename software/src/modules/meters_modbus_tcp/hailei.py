@@ -31,49 +31,49 @@ specs = [
                 'value_id': 'CurrentL1ImExDiff',
                 'start_address': 0x0403,
                 'value_type': 'S16',
-                'scale_factor': 0.1,  # FIXME: sign?
+                'scale_factor': 0.1,
             },
             {
                 'name': 'Inverter Current L2 [0.1 A]',
                 'value_id': 'CurrentL2ImExDiff',
                 'start_address': 0x0404,
                 'value_type': 'S16',
-                'scale_factor': 0.1,  # FIXME: sign?
+                'scale_factor': 0.1,
             },
             {
                 'name': 'Inverter Current L3 [0.1 A]',
                 'value_id': 'CurrentL3ImExDiff',
                 'start_address': 0x0405,
                 'value_type': 'S16',
-                'scale_factor': 0.1,  # FIXME: sign?
+                'scale_factor': 0.1,
             },
             {
                 'name': 'Inverter Power L1 [W]',
                 'value_id': 'PowerActiveL1ImExDiff',
                 'start_address': 0x0406,
                 'value_type': 'S32BE',
-                'scale_factor': 1.0,  # FIXME: sign?
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Inverter Power L2 [W]',
                 'value_id': 'PowerActiveL2ImExDiff',
                 'start_address': 0x0408,
                 'value_type': 'S32BE',
-                'scale_factor': 1.0,  # FIXME: sign?
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Inverter Power L3 [W]',
                 'value_id': 'PowerActiveL3ImExDiff',
                 'start_address': 0x040A,
                 'value_type': 'S32BE',
-                'scale_factor': 1.0,  # FIXME: sign?
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Inverter Total Power [W]',
                 'value_id': 'PowerActiveLSumImExDiff',
                 'start_address': 0x040C,
                 'value_type': 'S32BE',
-                'scale_factor': 1.0,  # FIXME: sign?
+                'scale_factor': -1.0,
             },
             {
                 'name': 'Inverter Grid Frequency [0.01 Hz]',
@@ -292,7 +292,7 @@ specs = [
                 'value_id': 'CurrentDCChaDisDiff',
                 'start_address': 0x0101,
                 'value_type': 'S16',
-                'scale_factor': 0.1,  # FIXME: sign?
+                'scale_factor': -0.1,
             },
             {
                 'name': 'Battery SOC [0.1 %]',
@@ -302,11 +302,11 @@ specs = [
                 'scale_factor': 0.1,
             },
             {
-                'name': 'Max cell temperature [0.1 °C]',
+                'name': 'Max cell temperature [0.01 °C]',
                 'value_id': 'Temperature',
                 'start_address': 0x0110,
                 'value_type': 'S16',
-                'scale_factor': 0.1,
+                'scale_factor': 0.01,
             },
             {
                 'name': 'Battery charge energy [0.1 kWh]',
@@ -327,7 +327,160 @@ specs = [
                 'value_id': 'PowerDCChaDisDiff',
                 'start_address': 0x0126,
                 'value_type': 'S16',
-                'scale_factor': -1.0,  # FIXME: sign?
+                'scale_factor': -1.0,
+            },
+        ],
+    },
+    {
+        'name': 'Hailei Hybrid Inverter PV',
+        'register_type': 'HoldingRegister',
+        'values': [
+            {
+                'name': 'PV1 Voltage [0.1 V]',
+                'value_id': 'VoltagePV1',
+                'start_address': 0x041D,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV1 Current [0.1 A]',
+                'value_id': 'CurrentPV1Export',
+                'start_address': 0x041E,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV1 Power [W]',
+                'value_id': 'PowerPV1Export',
+                'start_address': 0x041F,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV2 Voltage [0.1 V]',
+                'value_id': 'VoltagePV2',
+                'start_address': 0x0421,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV2 Current [0.1 A]',
+                'value_id': 'CurrentPV2Export',
+                'start_address': 0x0422,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV2 Power [W]',
+                'value_id': 'PowerPV2Export',
+                'start_address': 0x0423,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV3 Voltage [0.1 V]',
+                'value_id': 'VoltagePV3',
+                'start_address': 0x0425,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV3 Current [0.1 A]',
+                'value_id': 'CurrentPV3Export',
+                'start_address': 0x0426,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV3 Power [W]',
+                'value_id': 'PowerPV3Export',
+                'start_address': 0x0427,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV4 Voltage [0.1 V]',
+                'value_id': 'VoltagePV4',
+                'start_address': 0x0429,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV4 Current [0.1 A]',
+                'value_id': 'CurrentPV4Export',
+                'start_address': 0x042A,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV4 Power [W]',
+                'value_id': 'PowerPV4Export',
+                'start_address': 0x042B,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV5 Voltage [0.1 V]',
+                'value_id': 'VoltagePV5',
+                'start_address': 0x042D,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV5 Current [0.1 A]',
+                'value_id': 'CurrentPV5Export',
+                'start_address': 0x042E,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV5 Power [W]',
+                'value_id': 'PowerPV5Export',
+                'start_address': 0x042F,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV6 Voltage [0.1 V]',
+                'value_id': 'VoltagePV6',
+                'start_address': 0x0431,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV6 Current [0.1 A]',
+                'value_id': 'CurrentPV6Export',
+                'start_address': 0x0432,
+                'value_type': 'U16',
+                'scale_factor': 0.1,
+            },
+            {
+                'name': 'PV6 Power [W]',
+                'value_id': 'PowerPV6Export',
+                'start_address': 0x0433,
+                'value_type': 'U32BE',
+            },
+            {
+                'name': 'PV Average Voltage [0.1 V]',
+                'value_id': 'VoltagePVAvg',
+                'start_address': 'START_ADDRESS_VIRTUAL',
+            },
+            {
+                'name': 'PV Total Current [0.1 A]',
+                'value_id': 'CurrentPVSumExport',
+                'start_address': 'START_ADDRESS_VIRTUAL',
+            },
+            {
+                'name': 'PV Total Power [W]',
+                'value_id': 'PowerPVSumExport',
+                'start_address': 'START_ADDRESS_VIRTUAL',
+            },
+            {
+                'name': 'PV Total Power Signed [W]',
+                'value_id': 'PowerPVSumImExDiff',
+                'start_address': 'START_ADDRESS_VIRTUAL',
+            },
+            {
+                'name': 'Inverter Total PV Energy [0.1 kWh]',
+                'value_id': 'EnergyDCExport',
+                'start_address': 0x043E,
+                'value_type': 'U32BE',
+                'scale_factor': 0.1,
             },
         ],
     },

@@ -1,5 +1,5 @@
 /* esp32-firmware
- * Copyright (C) 2024 Matthias Bolte <matthias@tinkerforge.com>
+ * Copyright (C) 2025 Mattias Schäffersmann <mattias@tinkerforge.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,17 +19,10 @@
 
 #pragma once
 
-#include <Arduino.h>
+#include "module.h"
 
-#define SEMANTIC_VERSION_MAX_STRING_LENGTH (29 + 1) // strlen("MAJ.MIN.PAT-beta.BET+TIMESTAM") == 29 + 1 for NUL-terminator
-
-struct SemanticVersion {
-    uint8_t major = 255;
-    uint8_t minor = 255;
-    uint8_t patch = 255;
-    uint8_t beta = 255;
-    uint32_t timestamp = 0;
-
-    bool from_string(const char *buf);
-    int to_string(char *buf, size_t len) const;
+class NetworkHelper final : public IModule
+{
+public:
+    void register_urls() override;
 };

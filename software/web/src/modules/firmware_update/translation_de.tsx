@@ -9,7 +9,7 @@ let x = {
                 let result = [<>{`Firmware ${rolled_back_version} scheint instabil zu sein. Es wurde automatisch auf die vorherige Firmware ${version} zurückgewechselt.`}</>];
 
                 if ("{{{support_email}}}".length > 0) {
-                    result.push(<> Bitte einen <a href="/#event_log">Debug-Report</a> herunterladen und an <a href={removeUnicodeHacks(`mailto:{{{support_email}}}?subject=${display_type} Firmware ${rolled_back_version} scheint instabil`)}>{{{support_email}}}</a> schicken.</>);
+                    result.push(<> Bitte einen <a href="#event_log">Debug-Report</a> herunterladen und an <a href={removeUnicodeHacks(`mailto:{{{support_email}}}?subject=${display_type} Firmware ${rolled_back_version} scheint instabil`)}>{{{support_email}}}</a> schicken.</>);
                 }
 
                 return <>{result}</>;
@@ -60,7 +60,7 @@ let x = {
             "check_state_10": "Firmware-Index ist beschädigt",
             "check_state_11": "Abgebrochen",
             "check_state_12": "Teil-Download aufgetreten",
-            "check_state_13": "Aktualisierungssuche wird nicht unterstüzt",
+            "check_state_13": "Aktualisierungssuche wird nicht unterstützt",
             "install_state_2": "Eine andere Abfrage läuft bereits",
             "install_state_3": "Interner Fehler aufgetreten",
             "install_state_4": "Kein Aktualisierungs-URL konfiguriert",
@@ -84,7 +84,7 @@ let x = {
             "install_state_23": "Abgebrochen",
             "install_state_24": "Starte neu",
             "install_state_25": "Teil-Download aufgetreten",
-            "install_state_26": "Installation wird nicht unterstüzt",
+            "install_state_26": "Installation wird nicht unterstützt",
             "install_state_27": "Größe der Firmware-Datei ist unbekannt",
             "build_time": /*SFN*/(build_time: string) => `erstellt ${build_time}`/*NF*/,
             "publisher": /*SFN*/(publisher: string) => `von ${publisher}`/*NF*/,

@@ -96,7 +96,7 @@ let x = {
             "add_charger_name": "Anzeigename",
             "add_charger_host": "Hostname oder IP-Adresse",
             "add_charger_found": "Gefundene Wallboxen",
-            "add_charger_count": /*SFN*/(x: number, max: number) => x + " von " + max + " Wallboxen konfiguriert"/*NF*/,
+            "add_charger_message": /*SFN*/(have: number, max: number) => `${have} von ${max} Wallboxen konfiguriert`/*NF*/,
             "add_charger_rotation": "Phasenrotation",
             "charger_rotation_help": <>
                 <p>Gibt an, wie die Wallbox in Relation zum Netzanschluss- bzw. PV-Überschuss-Zähler oder zu den anderen Wallboxen angeschlossen ist. Typischerweise werden nur rechtsdrehende Phasenrotationen verwendet.</p>
@@ -237,9 +237,9 @@ let x = {
 
             "scan_failed": "Scan fehlgeschlagen",
 
-            "mode_explainer_0": "Dieser WARP Charger ist nicht Teil eines Lastmanagement-Verbunds mit anderen WARP Chargern und/oder einem WARP Energy Manager. PV-Überschussladen ist deaktiviert.",
-            "mode_explainer_1": "Dieser WARP Charger ist Teil eines Lastmanagement-Verbunds mit anderen WARP Chargern und/oder einem WARP Energy Manager. Ein anderes Gerät steuert diesen Lastmanagement-Verbund, um sicherzustellen, dass nie mehr als der verfügbare Strom bezogen wird.",
-            "mode_explainer_2": "Dieser WARP Charger verwendet entweder das PV-Überschussladen oder er steuert einen Lastmanagement-Verbund mit anderen WARP Chargern um sicherzustellen, dass nie mehr als der verfügbare Strom bezogen wird.",
+            "mode_explainer_0": <>{__("This_device")} ist nicht Teil eines Lastmanagement-Verbunds mit anderen WARP Chargern und/oder einem WARP Energy Manager. PV-Überschussladen ist deaktiviert.</>,
+            "mode_explainer_1": <>{__("This_device")} ist Teil eines Lastmanagement-Verbunds mit anderen WARP Chargern und/oder einem WARP Energy Manager. Ein anderes Gerät steuert diesen Lastmanagement-Verbund, um sicherzustellen, dass nie mehr als der verfügbare Strom bezogen wird.</>,
+            "mode_explainer_2": <>{__("This_device")} verwendet entweder das PV-Überschussladen oder er steuert einen Lastmanagement-Verbund mit anderen WARP Chargern um sicherzustellen, dass nie mehr als der verfügbare Strom bezogen wird.</>,
 
             "mode_explainer_0_em": <>{__("This_device")} steuert keine Wallboxen.</>,
             "mode_explainer_2_em": <>{__("This_device")} steuert eine oder mehrere Wallboxen.</>,

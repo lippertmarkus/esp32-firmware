@@ -31,7 +31,7 @@
 #include "tools.h"
 #include "tools/fs.h"
 #include "tools/memory.h"
-#include "string_builder.h"
+#include "tools/string_builder.h"
 
 extern TF_HAL hal;
 
@@ -92,13 +92,15 @@ void API::setup()
         bool skip_high_latency_states = state_update_counter % 4 != 0;
         ++state_update_counter;
 
-        for (size_t state_idx = 0; state_idx < states.size(); ++state_idx) {
-            auto &reg = states[state_idx];
+        const size_t states_count = states.size();
+
+        for (size_t state_idx = 0; state_idx < states_count; ++state_idx) {
+            const auto &reg = states[state_idx];
 
             if (skip_high_latency_states && !reg.low_latency)
                 continue;
 
-            size_t backend_count = this->backends.size();
+            const size_t backend_count = this->backends.size();
 
             uint8_t to_send = reg.config->was_updated((1 << backend_count) - 1);
             // If the config was not updated for any API, we don't have to serialize the payload.
@@ -107,7 +109,7 @@ void API::setup()
             }
 
             auto wsu = IAPIBackend::WantsStateUpdate::No;
-            for (size_t backend_idx = 0; backend_idx < this->backends.size(); ++backend_idx) {
+            for (size_t backend_idx = 0; backend_idx < backend_count; ++backend_idx) {
                 auto backend_wsu = this->backends[backend_idx]->wantsStateUpdate(state_idx);
                 if ((int) wsu < (int) backend_wsu) {
                     wsu = backend_wsu;
@@ -123,7 +125,7 @@ void API::setup()
                 continue;
             }
 
-            String payload = "";
+            String payload;
             // If no backend wants the state update as string
             // don't serialize the payload.
             if (wsu == IAPIBackend::WantsStateUpdate::AsString)
@@ -131,7 +133,7 @@ void API::setup()
 
             uint8_t sent = 0;
 
-            for (size_t backend_idx = 0; backend_idx < this->backends.size(); ++backend_idx) {
+            for (size_t backend_idx = 0; backend_idx < backend_count; ++backend_idx) {
                 if ((to_send & (1 << backend_idx)) == 0)
                     continue;
 
@@ -477,7 +479,7 @@ void API::addTemporaryConfig(String path, Config *config, const std::vector<cons
 }
 */
 
-bool API::restorePersistentConfig(const String &path, ConfigRoot *config)
+bool API::restorePersistentConfig(const String &path, ConfigRoot *config, SavedDefaultConfig remove_saved_default)
 {
     String filename = API::getLittleFSConfigPath(path);
 
@@ -485,13 +487,27 @@ bool API::restorePersistentConfig(const String &path, ConfigRoot *config)
         return false;
     }
 
-    String error = config->update_from_file(LittleFS.open(filename));
+    // Save previous updated state
+    const auto updated = config->value.updated;
+    config->value.updated = 0;
 
-    if (!error.isEmpty()) {
+    const String error = config->update_from_file(LittleFS.open(filename));
+
+    // If the file load didn't update anything, the file's content matches the default config.
+    // Remove the saved file in that case.
+    if (config->value.updated == 0 && remove_saved_default == SavedDefaultConfig::Remove) {
+        removeConfig(path);
+    }
+
+    // Include previous updated state
+    config->value.updated |= updated;
+
+    const bool restore_ok = error.isEmpty();
+    if (!restore_ok) {
         logger.printfln("Failed to restore persistent config %s: %s", path.c_str(), error.c_str());
     }
 
-    return error.isEmpty();
+    return restore_ok;
 }
 
 void API::register_urls()
@@ -702,9 +718,9 @@ void API::register_urls()
     server.on("/debug_report", HTTP_GET, [this](WebServerRequest request) {
         String result = "{\"uptime\": ";
         result += String(now_us().to<millis_t>().as<uint32_t>());
-        result += ",\n \"free_heap_bytes\":";
+        result += ",\n \"free_heap_bytes\": ";
         result += heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        result += ",\n \"largest_free_heap_block\":";
+        result += ",\n \"largest_free_heap_block\": ";
         result += heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         result += ",\n \"devices\": [";
 
@@ -716,7 +732,7 @@ void API::register_urls()
         while (tf_hal_get_device_info(&hal, i, uid_str, &port_name, &device_id) == TF_E_OK) {
             char buf[100] = {0};
 
-            snprintf(buf, sizeof(buf), "%c{\"UID\":\"%s\", \"DID\":%u, \"port\":\"%c\"}", i == 0 ? ' ' : ',', uid_str, device_id, port_name);
+            snprintf(buf, sizeof(buf), "%s{\"UID\":\"%s\",\"DID\":%u,\"port\":\"%c\"}", i == 0 ? "" : ",", uid_str, device_id, port_name);
             result += buf;
             ++i;
         }
@@ -729,7 +745,7 @@ void API::register_urls()
             char buf[100] = {0};
 
             tf_hal_get_error_counters(&hal, c, &spitfp_checksum, &spitfp_frame, &tfp_frame, &tfp_unexpected);
-            snprintf(buf, sizeof(buf), "%c{\"port\": \"%c\", \"SpiTfpChecksum\": %lu, \"SpiTfpFrame\": %lu, \"TfpFrame\": %lu, \"TfpUnexpected\": %lu}", c == 'A' ? ' ': ',', c,
+            snprintf(buf, sizeof(buf), "%s{\"port\":\"%c\",\"SpiTfpChecksum\": %lu,\"SpiTfpFrame\": %lu,\"TfpFrame\": %lu,\"TfpUnexpected\": %lu}", c == 'A' ? "" : ",", c,
                      spitfp_checksum,
                      spitfp_frame,
                      tfp_frame,
@@ -763,7 +779,7 @@ void API::register_urls()
 
         result += "}";
 
-        return request.send(200, "application/json; charset=utf-8", result.c_str());
+        return request.send(200, "application/json; charset=utf-8", result.c_str(), static_cast<ssize_t>(result.length()));
     });
 
     this->addState("info/features", &features);

@@ -192,18 +192,23 @@ export class EventLog extends Component<{}, EventLogState> {
                 debug_log += base64;
             }
             catch (e) {
-                if (typeof(e) == "string" && e.includes("404"))
-                    debug_log += "\n\nNo core dump recorded.";
+                const msg = typeof(e) == "string" ? e : e?.message;
+                if (!msg) {
+                    debug_log += "\n\nAn unknown error occurred while trying to download the core dump.";
+                } else if (msg.includes("404")) {
+                    debug_log += "\n\nNo core dump recorded: '" + msg + "'";
+                } else {
+                    debug_log += "\n\nFailed to download core dump: '" + msg + "'";
+                }
             }
 
-            util.downloadToFile(debug_log, __("event_log.content.debug_report_file"), "txt", "text/plain", timestamp);
+            util.downloadToTimestampedFile(debug_log, __("event_log.content.debug_report_file"), "txt", "text/plain", timestamp);
         } catch (e) {
             util.add_alert("debug_report_load_failed", "danger", () => __("event_log.script.load_debug_report_error"), () => e.message)
         } finally {
             this.setState({show_spinner: false})
         }
     }
-
 
     render(props: {}, state: Readonly<EventLogState>) {
         if (!util.render_allowed())

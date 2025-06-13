@@ -31,7 +31,7 @@ struct SlotConfig;
 template<> struct SlotConfig<Config::ConfUint> {
     static constexpr const size_t slots_per_superblock  = 2048;
     static constexpr const size_t slots_per_block       =  256;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -40,7 +40,7 @@ template<> struct SlotConfig<Config::ConfUint> {
 template<> struct SlotConfig<Config::ConfInt> {
     static constexpr const size_t slots_per_superblock  = 512;
     static constexpr const size_t slots_per_block       =  64;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -49,7 +49,7 @@ template<> struct SlotConfig<Config::ConfInt> {
 template<> struct SlotConfig<Config::ConfFloat> {
     static constexpr const size_t slots_per_superblock  = 1024;
     static constexpr const size_t slots_per_block       =  128;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -58,7 +58,7 @@ template<> struct SlotConfig<Config::ConfFloat> {
 template<> struct SlotConfig<Config::ConfString> {
     static constexpr const size_t slots_per_superblock  = 512;
     static constexpr const size_t slots_per_block       =  64;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -67,7 +67,7 @@ template<> struct SlotConfig<Config::ConfString> {
 template<> struct SlotConfig<Config::ConfArray> {
     static constexpr const size_t slots_per_superblock  = 256;
     static constexpr const size_t slots_per_block       =  32;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -76,7 +76,7 @@ template<> struct SlotConfig<Config::ConfArray> {
 template<> struct SlotConfig<Config::ConfObject> {
     static constexpr const size_t slots_per_superblock  = 2048;
     static constexpr const size_t slots_per_block       =  256;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -85,7 +85,7 @@ template<> struct SlotConfig<Config::ConfObject> {
 template<> struct SlotConfig<Config::ConfUnion> {
     static constexpr const size_t slots_per_superblock  = 128;
     static constexpr const size_t slots_per_block       =  16;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -94,7 +94,7 @@ template<> struct SlotConfig<Config::ConfUnion> {
 template<> struct SlotConfig<Config::ConfUint53> {
     static constexpr const size_t slots_per_superblock  = 128;
     static constexpr const size_t slots_per_block       =  16;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -103,7 +103,7 @@ template<> struct SlotConfig<Config::ConfUint53> {
 template<> struct SlotConfig<Config::ConfInt52> {
     static constexpr const size_t slots_per_superblock  = 128;
     static constexpr const size_t slots_per_block       =  16;
-    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;;
+    static constexpr const size_t blocks_per_superblock = slots_per_superblock / slots_per_block;
 
     static_assert(slots_per_superblock % slots_per_block == 0);
     static_assert((slots_per_block & (slots_per_block - 1)) == 0);
@@ -202,7 +202,13 @@ inline void notify_free_slot(size_t idx)
 #endif
 
     if (idx == RootBlock<ConfigT>::last_used_slot && RootBlock<ConfigT>::last_used_slot > 0) {
-        RootBlock<ConfigT>::last_used_slot = find_last_used_slot(RootBlock<ConfigT>::first_superblock, RootBlock<ConfigT>::last_used_slot - 1u);
+        const size_t last_used = find_last_used_slot(RootBlock<ConfigT>::first_superblock, RootBlock<ConfigT>::last_used_slot - 1u);
+
+        if (last_used == std::numeric_limits<size_t>::max()) { // All unused
+            RootBlock<ConfigT>::last_used_slot = 0;
+        } else {
+            RootBlock<ConfigT>::last_used_slot = static_cast<uint16_t>(last_used);
+        }
     }
 #endif
 }
@@ -217,8 +223,8 @@ extern template Config::ConfString::Slot *get_slot<Config::ConfString>(size_t id
 extern template Config::ConfArray::Slot  *get_slot<Config::ConfArray>(size_t idx);
 extern template Config::ConfObject::Slot *get_slot<Config::ConfObject>(size_t idx);
 extern template Config::ConfUnion::Slot  *get_slot<Config::ConfUnion>(size_t idx);
-extern template Config::ConfUint53::Slot   *get_slot<Config::ConfUint53>(size_t idx);
-extern template Config::ConfInt52::Slot    *get_slot<Config::ConfInt52>(size_t idx);
+extern template Config::ConfUint53::Slot *get_slot<Config::ConfUint53>(size_t idx);
+extern template Config::ConfInt52::Slot  *get_slot<Config::ConfInt52>(size_t idx);
 
 template<typename ConfigT>
 size_t get_allocated_slot_memory()

@@ -63,11 +63,12 @@ public:
 
     [[gnu::const]] MeterClassID get_class() const override;
     void setup(Config *ephemeral_config) override;
+    void register_events() override;
 
     bool supports_power() override          {return true;}
     bool supports_energy_import() override  {return true;}
     bool supports_energy_export() override  {return true;}
-    //bool supports_currents() override       {return true;}
+    bool supports_currents() override       {return true;}
 
 private:
     void parse_packet();
@@ -75,6 +76,7 @@ private:
     void parse_values(const uint8_t *buf, int buflen);
 
     uint32_t slot;
+    uint32_t serial_number = 0;
     uint32_t power_export_index = 0;
     uint32_t power_import_index = 0;
     size_t   obis_value_positions[METERS_SMA_SPEEDWIRE_OBIS_COUNT];

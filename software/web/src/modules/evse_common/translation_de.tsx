@@ -45,7 +45,7 @@ let x = {
             "error_state": "Fehlerzustand",
             "error_state_help": <>
                 <ul class="mb-0">
-                    <li><p><strong>Schalterfehler:</strong> Die Wallbox wurde nicht korrekt installiert. Die Schaltereinstellung des Ladecontrollers ist noch auf dem Werkszustand. Siehe <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/warp_charger/assembly_and_installation#einstellen-des-ladestroms")}>instellen des Ladestroms</a>.</p></li>
+                    <li><p><strong>Schalterfehler:</strong> Die Wallbox wurde nicht korrekt installiert. Die Schaltereinstellung des Ladecontrollers ist noch auf dem Werkszustand. Siehe <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/warp_charger/assembly_and_installation#einstellen-des-ladestroms")}>Einstellen des Ladestroms</a>.</p></li>
                     <li><p><strong>DC-Fehler:</strong> Ein DC-Fehlerstrom wurde erkannt. Der Fehler kann entweder über die Webseite der Wallbox oder über ein kurzzeitiges Trennen der Stromversorgung der Wallbox zurückgesetzt werden.</p></li>
                     <li><p><strong>Schützfehler/PE-Fehler:</strong> Eines der Schütze schaltet nicht korrekt (Siehe Schützprüfung/-zustand), Phase L1 ist stromlos oder Erdungsfehler.</p></li>
                     <li><p><strong>Kommunikationsfehler:</strong> Fehler bei der Kommunikation mit dem Elektrofahrzeug. Bei erstmaligem Auftreten das Ladekabel vom Fahrzeug trennen, 10 Sekunden warten und das Ladekabel erneut mit dem Fahrzeug verbinden (erneuter Ladevorgang). Sollte das Problem bestehen bleiben siehe <a href={removeUnicodeHacks("{{{doc_base_url}}}/docs/warp_charger/troubleshooting#led-blinkt-f%C3%BCnfmal-rot-im-intervall-dass-webinterface-zeigt-kommunikationsfehler")}>Anleitung</a>.</p></li>
@@ -104,14 +104,14 @@ let x = {
 
             "auto_start_description": "Manuelle Ladefreigabe",
             "auto_start_description_help": <><p>Wenn die manuelle Ladefreigabe aktiviert wird, wird ein Ladevorgang niemals automatisch begonnen. Jeder Ladevorgang muss über das Webinterface, die API oder (je nach Tastereinstellung) den Taster gestartet werden. Die manuelle Ladefreigabe blockiert zusätzlich zu eventuell anderen aktiven Ladestromgrenzen. Das heißt, dass sie nicht aktiviert werden muss, wenn Ladevorgänge beispielsweise mit der Benutzerfreigabe per NFC-Tag, oder der Steuerung per OCPP kontrolliert werden.</p></>,
-            "auto_start_enable": "Erzwingt dass Ladevorgänge immer über das Webinterface, die API oder (je nach Tastereinstellung) den Taster manuell gestartet werden müssen.",
+            "auto_start_enable": "Erzwingt, dass Ladevorgänge immer über das Webinterface, die API oder (je nach Tastereinstellung) den Taster manuell gestartet werden müssen.",
 
             "external_description": "Externe Steuerung",
             "external_description_muted": <><a href="https://www.warp-charger.com/evcc.html?v=2">siehe Einrichtungs-Tutorial für Details</a></>,
             "external_enable": <>Erlaubt einer externen Steuerung (z.B. <a href="https://evcc.io/">EVCC</a>) diese Wallbox zu steuern</>,
 
             "boost_mode_desc": "Boost-Modus",
-            "boost_mode_desc_help": <><p>Die Ladeelektronik mancher Fahrzeuge interpretiert einen vom WARP3 Charger vorgeschriebenen Ladestrom zu niedrig. Der Boost-Modus versucht, diesen Effekt auszugleichen, indem ein leicht höherer Ladestrom kommuniziert wird.</p></>,
+            "boost_mode_desc_help": <><p>Die Ladeelektronik mancher Fahrzeuge interpretiert einen __("from_the_device") vorgeschriebenen Ladestrom zu niedrig. Der Boost-Modus versucht, diesen Effekt auszugleichen, indem ein leicht höherer Ladestrom kommuniziert wird.</p></>,
             "boost_mode": "Gibt der Ladeelektronik des Fahrzeugs einen leicht höheren Ladestrom vor (+ 0,24 A) um Messfehler der Ladeelektronik zu kompensieren. Nur Verwenden, falls ein Fahrzeug mit einem kleineren als dem erlaubten Ladestrom lädt!",
 
             "reset_description": "Aktionen",

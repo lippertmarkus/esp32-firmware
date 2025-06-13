@@ -24,7 +24,7 @@
 #include "meter_class_none.h"
 #include "meter_value_imexdiff.h"
 #include "tools.h"
-#include "string_builder.h"
+#include "tools/string_builder.h"
 
 #include "gcc_warnings.h"
 #ifdef __GNUC__
@@ -222,7 +222,8 @@ void Meters::pre_setup()
 
 void Meters::setup()
 {
-    generators.shrink_to_fit();
+    // Not necessary if the vector is cleared anyway after all meters have been set up.
+    //generators.shrink_to_fit();
 
     // Create config prototypes, depending on available generators.
     uint8_t class_count = static_cast<uint8_t>(generators.size());
@@ -231,7 +232,7 @@ void Meters::setup()
     for (uint32_t i = 0; i < class_count; i++) {
         const auto &generator_tuple = generators[i];
         MeterClassID meter_class = std::get<0>(generator_tuple);
-        auto meter_generator = std::get<1>(generator_tuple);
+        IMeterGenerator *meter_generator = std::get<1>(generator_tuple);
         config_prototypes[i] = {meter_class, *meter_generator->get_config_prototype()};
     }
 
@@ -290,6 +291,10 @@ void Meters::setup()
         }
         meter_slot.meter = meter;
     }
+
+    // The generators aren't used anymore at the moment.
+    generators.clear();
+    generators.shrink_to_fit();
 
     history_chars_per_value = max(String(METER_VALUE_HISTORY_VALUE_MIN).length(), String(METER_VALUE_HISTORY_VALUE_MAX).length());
     // val_min values are replaced with null -> require at least 4 chars per value.
@@ -993,8 +998,13 @@ void Meters::update_value(uint32_t slot, uint32_t index, float new_value)
     }
 
     MeterSlot &meter_slot = meter_slots[slot];
-
     Config &values = meter_slot.values;
+
+    if (index >= values.count()) {
+        logger.printfln_meter("Tried to update value %lu that is known to not exist (index >= %zu)", index, values.count());
+        return;
+    }
+
     Config *conf_val = static_cast<Config *>(values.get(index));
     micros_t t_now = now_us();
 
@@ -1303,12 +1313,13 @@ static_assert(ARRAY_SIZE(meters_path_postfixes) == static_cast<uint32_t>(Meters:
 
 String Meters::get_path(uint32_t slot, Meters::PathType path_type)
 {
-    String path = "meters/";
-    path.concat(slot);
-    path.concat('/');
-    path.concat(meters_path_postfixes[static_cast<uint32_t>(path_type)]);
+    char buf[32];
+    StringWriter sw(buf, ARRAY_SIZE(buf));
 
-    return path;
+    sw.printf("meters/%lu/", slot);
+    sw.puts(meters_path_postfixes[static_cast<uint32_t>(path_type)]);
+
+    return String(buf, sw.getLength());
 }
 
 uint32_t meters_find_id_index(const MeterValueID value_ids[], uint32_t value_id_count, std::initializer_list<MeterValueID> ids)

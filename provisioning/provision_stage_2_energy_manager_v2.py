@@ -112,7 +112,7 @@ class EnergyManagerV2Tester:
 
         self.ssid = hardware_type + "-" + esp_uid_qr
 
-        event_log = connect_to_ethernet(self.ssid, "event_log").decode('utf-8')
+        event_log = connect_to_ethernet(self.ssid, "event_log")[0].decode('utf-8')
         print(event_log)
 
         macs = re.findall(re.compile(r'ethernet         \| Connected: 100 Mbps Full Duplex, MAC: ((?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})'), event_log)
@@ -159,18 +159,19 @@ class EnergyManagerV2Tester:
                         self.fatal_error("Can't flash firmware!")
 
             time.sleep(3)
+            connect_to_ethernet(self.ssid, "firmware_update/validate")
             factory_reset(self.ssid)
         else:
             print("Flashed firmware is up-to-date.")
 
         self.result["firmware"] = wem_brick_path.split("/")[-1]
 
-        connect_to_ethernet(self.ssid, "hidden_proxy/enable")
+        host = connect_to_ethernet(self.ssid, "hidden_proxy/enable")[1]
 
         time.sleep(1)
         wem_ipcon = IPConnection()
         try:
-            wem_ipcon.connect(self.ssid, 4223)
+            wem_ipcon.connect(host, 4223)
         except Exception as e:
             self.fatal_error("Failed to connect to ESP proxy. Is the router's DHCP cache full?")
 
@@ -199,10 +200,14 @@ class EnergyManagerV2Tester:
         if self.sku == 'SEB':
             arguments = [
                 os.path.join(WARP_CHARGER_GIT_PATH, 'label', 'print-seb-label.py'),
+                '-c',
+                '2',
             ]
         else:
             arguments = [
                 os.path.join(WARP_CHARGER_GIT_PATH, 'label', 'print-wem-label.py'),
+                '-c',
+                '2',
                 self.sku,
             ]
 
@@ -214,16 +219,13 @@ class EnergyManagerV2Tester:
         ]
 
         result = subprocess.check_output(arguments)
-        if result == b'':
-            print(' ... Label 1 OK')
-        else:
-            self.fatal_error(" ... Label 1 FAILED!")
 
-        result = subprocess.check_output(arguments)
         if result == b'':
-            print(' ... Label 2 OK')
+            print(' ... Labels OK')
         else:
-            self.fatal_error(" ... Label 1 FAILED!")
+            self.fatal_error(" ... Labels FAILED!")
+
+        time.sleep(2)
 
         if self.sku == 'SEB':
             arguments = [
@@ -242,6 +244,7 @@ class EnergyManagerV2Tester:
         ]
 
         result = subprocess.check_output(arguments)
+
         if result == b'':
             print(' ... Package label OK')
         else:

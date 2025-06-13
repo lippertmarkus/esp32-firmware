@@ -19,12 +19,13 @@
 
 #include "network.h"
 
-#include <sdkconfig.h>
+#include <esp_netif.h>
+#include <sdkconfig.h> // For CONFIG_MDNS_TASK_STACK_SIZE
 
 #include "mdns.h"
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
-#include "string_builder.h"
+#include "tools/string_builder.h"
 #include "build.h"
 
 #include "unsafe_ports.h"
@@ -42,15 +43,17 @@ extern char local_uid_str[32];
 void Network::pre_setup()
 {
     config = ConfigRoot{Config::Object({
-        {"hostname", Config::Str("replaceme", 0, 32)},
+        {"hostname", Config::Str("hostname", 1, 32)}, // Will be replaced with stored config or sensible default. Cannot be empty.
         {"enable_mdns", Config::Bool(true)},
         {"web_server_port", Config::Uint16(80)}
     }), [this](Config &update, ConfigSource source) -> String {
-        auto new_port = update.get("web_server_port")->asUint();
-        for(size_t i = 0; i < unsafe_ports_length; ++i)
-            if (unsafe_ports[i] == new_port)
-                return "Selected web server port is regarded as unsafe by web browsers. Please select another port.";
+        const uint16_t new_port = static_cast<uint16_t>(update.get("web_server_port")->asUint());
 
+        for (size_t i = 0; i < unsafe_ports_length; ++i) {
+            if (unsafe_ports[i] == new_port) {
+                return "Selected web server port is regarded as unsafe by web browsers. Please select another port.";
+            }
+        }
         return "";
     }};
 
@@ -74,13 +77,18 @@ void Network::setup()
     this->enable_mdns = config.get("enable_mdns")->asBool();
     this->web_server_port = config.get("web_server_port")->asUint();
 
+    esp_netif_init();
+
     initialized = true;
 }
 
 void Network::register_urls()
 {
     api.addPersistentConfig("network/config", &config, {}, {"hostname"});
-    api.addState("network/state", &state);
+
+#if !MODULE_NETWORK_HELPER_AVAILABLE()
+    register_urls_late();
+#endif
 
     if (!this->enable_mdns) {
         return;
@@ -89,20 +97,23 @@ void Network::register_urls()
     if (mdns_init() != ESP_OK) {
         logger.printfln("Error initializing mDNS responder");
     } else {
-        String hostname = this->hostname;
-
-        if(mdns_hostname_set(hostname.c_str()) != ESP_OK) {
+        if(mdns_hostname_set(this->hostname.c_str()) != ESP_OK) {
             logger.printfln("Error initializing mDNS hostname");
         } else {
             logger.printfln("mDNS responder started");
         }
     }
 
-    mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+    mdns_service_add(NULL, "_http", "_tcp", this->web_server_port, NULL, 0);
 
 #if MODULE_DEBUG_AVAILABLE()
     debug.register_task("mdns", CONFIG_MDNS_TASK_STACK_SIZE);
 #endif
+}
+
+void Network::register_urls_late()
+{
+    api.addState("network/state", &state);
 }
 
 void Network::register_events()
@@ -168,4 +179,9 @@ void Network::update_connected()
 
 void Network::set_default_hostname(const String &hostname) {
     this->default_hostname = hostname;
+}
+
+int64_t Network::on_network_connected(std::function<EventResult(const Config *)> &&callback)
+{
+    return event.registerEvent("network/state", {"connected"}, std::move(callback));
 }

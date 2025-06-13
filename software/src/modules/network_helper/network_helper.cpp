@@ -1,7 +1,5 @@
-/* bricklib2
- * Copyright (C) 2019 Olaf Lüke <olaf@tinkerforge.com>
- *
- * crc32.h: Implementation of CRC32 checksum calculation
+/* esp32-firmware
+ * Copyright (C) 2025 Mattias Schäffersmann <mattias@tinkerforge.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,14 +17,10 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef CRC32_H
-#define CRC32_H
+#include "module_dependencies.h"
+#include "network_helper.h"
 
-#include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
-
-void crc32_ieee_802_3_recalculate(const void *data, size_t length, uint32_t *crc);
-uint32_t crc32_ieee_802_3(const void *data, size_t length);
-
-#endif
+void NetworkHelper::register_urls()
+{
+    network.register_urls_late();
+}

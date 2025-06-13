@@ -185,9 +185,9 @@ void RequireMeter::start_task()
         static bool last_meter_timeout = false;
         if (meter_timeout != last_meter_timeout) {
             if (meter_timeout) {
-                logger.printfln("Energy meter stuck or unreachable! Blocking charging.");
+                logger.printfln("Charger energy meter stuck or unreachable! Blocking charging.");
             } else {
-                logger.printfln("Energy meter working again. Allowing charging.");
+                logger.printfln("Charger energy meter working again. Allowing charging.");
             }
         }
         last_meter_timeout = meter_timeout;
@@ -196,7 +196,7 @@ void RequireMeter::start_task()
         // This might allow an immediate charge, just to abort it right away, but the EVSE
         // might start a charge by itself anyway before the ESP finished starting,
         // unless NFC or OCPP are enabled.
-    }, 3_s, 1_s);
+    }, 4_s, 1_s);
     is_running = true;
 }
 

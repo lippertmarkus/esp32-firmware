@@ -19,17 +19,23 @@
 
 #include "coredump.h"
 
-#include <LittleFS.h>
 #include <esp_core_dump.h>
 #include <esp_flash.h>
 
 #include "event_log_prefix.h"
 #include "module_dependencies.h"
 #include "build.h"
-#include "tools.h"
+#include "tools/string_builder.h"
+
+#include "gcc_warnings.h"
 
 // Pre- and postfix take up 54 characters.
 COREDUMP_RTC_DATA_ATTR char tf_coredump_info[512];
+
+#if defined(__GNUC__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Weffc++"
+#endif
 
 Coredump::Coredump()
 {
@@ -53,40 +59,88 @@ Coredump::Coredump()
     setup_error = CoredumpSetupError::BufferToSmall;
 }
 
+#if defined(__GNUC__)
+    #pragma GCC diagnostic pop
+#endif
+
 bool Coredump::build_coredump_info(JsonDocument &tf_coredump_json)
 {
-    String tf_coredump_prefix = "___tf_coredump_info_start___";
-    String tf_coredump_suffix = "___tf_coredump_info_end___";
-
     String tf_coredump_json_string;
     serializeJson(tf_coredump_json, tf_coredump_json_string);
 
-    String tf_coredump_string = tf_coredump_prefix;
+    constexpr const char *prefix = "___tf_coredump_info_start___";
+    constexpr const char *suffix = "___tf_coredump_info_end___";
+    constexpr size_t prefix_len = constexpr_strlen(prefix);
+    constexpr size_t suffix_len = constexpr_strlen(suffix);
 
-    if (tf_coredump_prefix.length() + tf_coredump_json_string.length() + tf_coredump_suffix.length() >= sizeof(tf_coredump_info))
+    if (prefix_len + tf_coredump_json_string.length() + suffix_len >= sizeof(tf_coredump_info))
         return false;
 
-    tf_coredump_string += tf_coredump_json_string + tf_coredump_suffix;
+    StringWriter sw(tf_coredump_info, sizeof(tf_coredump_info));
 
-    memcpy(tf_coredump_info, tf_coredump_string.c_str(), tf_coredump_string.length() + 1); // Include termination.
+    sw.puts(prefix,                          static_cast<ssize_t>(prefix_len));
+    sw.puts(tf_coredump_json_string.c_str(), static_cast<ssize_t>(tf_coredump_json_string.length()));
+    sw.puts(suffix,                          static_cast<ssize_t>(suffix_len));
 
     return true;
 }
 
-void Coredump::pre_setup()
+void Coredump::pre_init()
 {
-    bool coredump_available;
-    esp_err_t status = esp_core_dump_image_check();
-
-    if (status == ESP_ERR_INVALID_CRC) {
-        printf("Core dump image invalid");
-        coredump_available = false;
-    } else {
-        coredump_available = status == ESP_OK;
+    if (esp_reset_reason() != ESP_RST_PANIC) {
+        return;
     }
 
+    char task_name[16];
+    uint32_t exc_cause;
+    char backtrace[192];
+    StringWriter sw_bt(backtrace, ARRAY_SIZE(backtrace));
+
+    { // Scope for summary
+        esp_core_dump_summary_t summary;
+        if (esp_core_dump_get_summary(&summary) != ESP_OK) {
+            strlcpy(task_name, "<unknown>", sizeof(task_name));
+            exc_cause = EXCCAUSE_EXCCAUSE_MASK + 1;
+        } else {
+            memcpy(task_name, summary.exc_task, sizeof(task_name));
+            exc_cause = summary.ex_info.exc_cause;
+
+            sw_bt.puts("Backtrace:");
+
+            const uint32_t frame_count = std::min(summary.exc_bt_info.depth, static_cast<uint32_t>(ARRAY_SIZE(summary.exc_bt_info.bt)));
+            const uint32_t *bt = summary.exc_bt_info.bt;
+            for (uint32_t i = 0; i < frame_count; i ++) {
+                sw_bt.printf(" 0x%08lx", bt[i]);
+            }
+
+            if (summary.exc_bt_info.corrupted) {
+                sw_bt.puts(" |<-CORRUPTED\n");
+            } else {
+                sw_bt.putc('\n');
+            }
+        }
+    }
+
+    { // Scope for panic_reason
+        char panic_reason[256];
+        if (esp_core_dump_get_panic_reason(panic_reason, sizeof(panic_reason)) == ESP_OK) {
+            logger.printfln("Task '%.16s' panicked: '%s'", task_name, panic_reason);
+        } else {
+            const char *exc_name = exc_cause < ARRAY_SIZE(exc_cause_table) ? exc_cause_table[exc_cause] : "<unknown>";
+            logger.printfln("Task '%.16s' caused exception %lu: %s", task_name, exc_cause, exc_name);
+        }
+    }
+
+    const size_t backtrace_length = sw_bt.getLength();
+    if (backtrace_length > 0) {
+        logger.print_plain(backtrace, backtrace_length);
+    }
+}
+
+void Coredump::pre_setup()
+{
     state = Config::Object({
-        {"coredump_available", Config::Bool(coredump_available)}
+        {"coredump_available", Config::Bool(false)}
     });
 
     if (setup_error == CoredumpSetupError::BufferToSmall) {
@@ -96,49 +150,77 @@ void Coredump::pre_setup()
     }
 }
 
+void Coredump::setup()
+{
+    const esp_err_t status = esp_core_dump_image_check();
+
+    switch(status) {
+        case ESP_OK:
+            state.get("coredump_available")->updateBool(true);
+            break;
+        case ESP_ERR_NOT_FOUND:
+            break;
+        case ESP_ERR_INVALID_SIZE:
+            // Don't report this because it's the default error when a core dump was erased.
+            break;
+        case ESP_ERR_INVALID_CRC:
+            // esp_core_dump_image_check() writes confusing log messages directly to the console when checksum verification fails.
+            // Change this to a plain printf if it shouldn't be in the event log.
+            logger.printfln("Core dump has invalid CRC");
+            break;
+        default:
+            logger.printfln("Core dump unavailable: %s (0x%lx)", esp_err_to_name(status), static_cast<uint32_t>(status));
+    }
+}
+
 void Coredump::register_urls()
 {
     api.addState("coredump/state", &state);
 
-    // TODO: Make this an API command?
-    server.on("/coredump/erase", HTTP_GET, [this](WebServerRequest request) {
+    server.on_HTTPThread("/coredump/erase", HTTP_GET, [this](WebServerRequest request) {
         esp_core_dump_image_erase();
-        if (esp_core_dump_image_check() == ESP_OK)
-            return request.send(503, "text/plain", "Error while erasing core dump");
 
-        state.get("coredump_available")->updateBool(false);
+        if (esp_core_dump_image_check() == ESP_OK) {
+            return request.send(503, "text/plain", "Error while erasing core dump");
+        }
+
+        task_scheduler.scheduleOnce([this]() {
+            this->state.get("coredump_available")->updateBool(false);
+        });
 
         return request.send(200);
     });
 
     server.on_HTTPThread("/coredump/coredump.elf", HTTP_GET, [this](WebServerRequest request) {
-        if (esp_core_dump_image_check() != ESP_OK)
-            return request.send(404);
+        constexpr size_t OFFSET_BEFORE_ELF_HEADER = 24;
+        constexpr size_t BUFFER_SIZE = 2048;
+        char buffer[BUFFER_SIZE];
 
-        esp_core_dump_summary_t summary;
-        if (esp_core_dump_get_summary(&summary) != ESP_OK)
-            return request.send(503, "text/plain", "Failed to get core dump summary");
+        esp_err_t ret = esp_core_dump_image_check();
+        if (ret != ESP_OK) {
+            StringWriter sw(buffer, BUFFER_SIZE);
+            sw.printf("No core dump image available: %s (0x%lX)", esp_err_to_name(ret), static_cast<uint32_t>(ret));
+            return request.send(404, "text/plain", buffer, static_cast<ssize_t>(sw.getLength()));
+        }
 
         size_t addr;
         size_t size;
-        if (esp_core_dump_image_get(&addr, &size) != ESP_OK)
-            return request.send(503, "text/plain", "Failed to get core dump image size");
+        ret = esp_core_dump_image_get(&addr, &size);
+        if (ret != ESP_OK) {
+            StringWriter sw(buffer, BUFFER_SIZE);
+            sw.printf("Failed to get core dump image: %s (0x%lX)", esp_err_to_name(ret), static_cast<uint32_t>(ret));
+            return request.send(503, "text/plain", buffer, static_cast<ssize_t>(sw.getLength()));
+        }
 
         request.beginChunkedResponse(200, "application/octet-stream");
-
-        constexpr size_t BUFFER_SIZE = 2048;
-        constexpr size_t OFFSET_BEFORE_ELF_HEADER = 24;
-
-        char buffer[BUFFER_SIZE];
 
         for (size_t i = 0; i < size; i += BUFFER_SIZE) {
             size_t to_send = std::min(BUFFER_SIZE, size - i);
             if (esp_flash_read(NULL, buffer, addr + i, to_send) != ESP_OK) {
-                String s = "ESP_FLASH_READ failed. Core dump truncated";
-                request.sendChunk(s.c_str(), s.length());
-                return request.endChunkedResponse();
+                request.sendChunk("\n\nESP_FLASH_READ failed. Core dump truncated", HTTPD_RESP_USE_STRLEN);
+                break;
             }
-            request.sendChunk(buffer + (i == 0 ? OFFSET_BEFORE_ELF_HEADER : 0), to_send - (i == 0 ? OFFSET_BEFORE_ELF_HEADER : 0));
+            request.sendChunk(buffer + (i == 0 ? OFFSET_BEFORE_ELF_HEADER : 0), static_cast<ssize_t>(to_send - (i == 0 ? OFFSET_BEFORE_ELF_HEADER : 0)));
         }
 
         return request.endChunkedResponse();

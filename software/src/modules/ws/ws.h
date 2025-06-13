@@ -25,7 +25,7 @@
 #include "module.h"
 #include "modules/api/api.h"
 #include "web_sockets.h"
-#include "string_builder.h"
+#include "tools/string_builder.h"
 
 class WS final : public IModule, public IAPIBackend
 {
@@ -48,6 +48,8 @@ public:
     bool pushStateUpdateEnd(StringBuilder *sb);
     bool pushRawStateUpdateBegin(StringBuilder *sb, size_t payload_len, const char *path, ssize_t path_len = -1);
     bool pushRawStateUpdateEnd(StringBuilder *sb);
+
+    bool haveActiveClient();
 
     WebSockets web_sockets;
 };

@@ -30,7 +30,6 @@
 #undef  tracefln_continue
 #undef  tracefln_debug
 
-#include <Arduino.h>
 #include <limits>
 #include <time.h>
 #include <inttypes.h>
@@ -65,10 +64,9 @@ void EventLog::pre_init()
 {
     event_buf.setup();
 
+    uint32_t numeric_reset_reason;
     printfln_prefixed("", 0, "    **** " BUILD_MANUFACTURER_UPPER " " BUILD_DISPLAY_NAME_UPPER " V%s ****", build_version_full_str_upper());
-    printfln_prefixed("", 0, "         %luK RAM SYSTEM   %lu HEAP BYTES FREE", ESP.getHeapSize() / 1024, ESP.getFreeHeap());
-    printfln_prefixed("", 0, "READY.");
-    printfln_prefixed("", 0, "Last reset reason was: %s", tf_reset_reason());
+    printfln_prefixed("", 0, "Last reset reason was: %s (%lu)", tf_reset_reason(&numeric_reset_reason), numeric_reset_reason);
 }
 
 size_t EventLog::alloc_trace_buffer(const char *name, size_t size) {
@@ -77,7 +75,7 @@ size_t EventLog::alloc_trace_buffer(const char *name, size_t size) {
         esp_system_abort("Using alloc_trace_buffer after the pre_setup is not allowed!");
     }
 
-    if (this->trace_buffer_size_allocd + trace_buffer_size_allocd > MAX_TRACE_BUFFERS_SIZE){
+    if (trace_buffer_size_allocd + size > MAX_TRACE_BUFFERS_SIZE){
         esp_system_abort("Maximum size of trace buffers exceeded!");
     }
 
@@ -87,7 +85,10 @@ size_t EventLog::alloc_trace_buffer(const char *name, size_t size) {
 
     trace_buffers[trace_buffers_in_use].name = name;
     trace_buffers[trace_buffers_in_use].buf.setup(size);
+
     ++trace_buffers_in_use;
+    trace_buffer_size_allocd += size;
+
     return trace_buffers_in_use - 1;
 #else
     return std::numeric_limits<size_t>::max();
@@ -426,7 +427,7 @@ void EventLog::print_drop(size_t count)
 {
     char c = '\n';
 
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         event_buf.pop(&c);
     }
 
@@ -591,7 +592,7 @@ void EventLog::trace_drop(size_t trace_buf_idx, size_t count)
 
     auto *trace_buffer = &this->trace_buffers[trace_buf_idx];
 
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         trace_buffer->buf.pop(&c);
     }
 

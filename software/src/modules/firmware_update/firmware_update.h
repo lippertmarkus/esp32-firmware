@@ -28,43 +28,35 @@
 
 #include "module.h"
 #include "config.h"
-#include "semantic_version.h"
+#include "tools/semantic_version.h"
 #include "async_https_client.h"
 #include "signature_verify.embedded.h"
 #include "install_state.enum.h"
 
 struct TFJsonSerializer;
 
+#define BLOCK_READER_MAGIC_LENGTH 7
+
 template <typename T>
 class BlockReader
 {
 public:
-    BlockReader(size_t block_offset, size_t block_len, uint32_t expected_magic_0, uint32_t expected_magic_1) :
-        block_offset(block_offset), block_len(block_len), expected_magic_0(expected_magic_0), expected_magic_1(expected_magic_1) {}
+    BlockReader(size_t block_offset, size_t block_len, const uint8_t expected_magic[BLOCK_READER_MAGIC_LENGTH]);
 
     void reset();
     bool handle_chunk(size_t chunk_offset, uint8_t *chunk_data, size_t chunk_len);
 
     size_t block_offset;
     size_t block_len;
+    uint8_t expected_magic[BLOCK_READER_MAGIC_LENGTH];
 
-    uint32_t expected_magic_0;
-    uint32_t expected_magic_1;
+    T block;
+    size_t read_block_len;
+    bool block_found;
 
-    union {
-        T block;
-        struct {
-            uint32_t actual_magic_0;
-            uint32_t actual_magic_1;
-        };
-    };
-
-    size_t read_block_len = 0;
-    bool block_found = false;
-
-    uint32_t actual_checksum = 0;
-    uint32_t expected_checksum = 0;
-    size_t read_expected_checksum_len = 0;
+    uint32_t actual_checksum;
+    uint32_t expected_checksum;
+    size_t read_expected_checksum_len;
 };
 
 class FirmwareUpdate final : public IModule
@@ -102,20 +94,25 @@ private:
     bool flash_firmware_in_progress = false;
 
     struct firmware_info_t {
-        uint32_t magic[2] = {0};
-        char firmware_name[61] = {0};
-        uint8_t fw_version[3] = {0};
-        uint32_t fw_build_time = 0;
-        uint8_t fw_version_beta = 0;
+        uint8_t magic[BLOCK_READER_MAGIC_LENGTH] = {};
+        uint8_t version = 0;
+        char display_name[61] = {};
+        uint8_t fw_version_major = 0;
+        uint8_t fw_version_minor = 0;
+        uint8_t fw_version_patch = 0;
+        uint32_t fw_build_timestamp = 0;
+        uint8_t fw_version_beta = 0; // since firmware info version 2, before it's 0xFF
+        char name[61] = {}; // since firmware info version 3, before it's 0xFF
     };
 
     BlockReader<firmware_info_t> firmware_info;
 
 #if signature_sodium_public_key_length != 0
     struct signature_info_t {
-        uint32_t magic[2] = {0};
-        char publisher[64] = {0};
-        unsigned char signature[crypto_sign_BYTES] = {0};
+        uint8_t magic[BLOCK_READER_MAGIC_LENGTH] = {};
+        uint8_t version = 0;
+        char publisher[64] = {};
+        unsigned char signature[crypto_sign_BYTES] = {};
     };
 
     BlockReader<signature_info_t> signature_info;

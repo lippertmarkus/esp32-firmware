@@ -6,7 +6,7 @@ let x = {
             "power_history": null,
             "current_power": "Leistung",
             "power_sums": "Leistungen",
-            "meters_without_location": /*FFN*/(meter_names: string[]) => <p>Für {meter_names.length > 1 ? <>die</> : <>den</>} folgenden Stromzähler ist kein Messort konfiguriert. Bitte einen Messort für {meter_names.length > 1 ? <>diese</> : <>diesen</>} <a href="/#meters">Stromzähler</a> wählen, um {meter_names.length > 1 ? <>diese</> : <>diesen</>} in die Leistungen und den Leistungsverlauf miteinzubeziehen:</p>/*NF*/
+            "meters_without_location": /*FFN*/(meter_names: string[]) => <p>Für {meter_names.length > 1 ? <>die</> : <>den</>} folgenden Stromzähler ist kein Messort konfiguriert. Bitte einen Messort für {meter_names.length > 1 ? <>diese</> : <>diesen</>} <a href="#meters">Stromzähler</a> wählen, um {meter_names.length > 1 ? <>diese</> : <>diesen</>} in die Leistungen und den Leistungsverlauf miteinzubeziehen:</p>/*NF*/
         },
         "navbar": {
             "meters": "Stromzähler"
@@ -37,9 +37,7 @@ let x = {
             "table_phases": "Phasen",
 
             "add_meter_title": "Stromzähler hinzufügen",
-            "add_meter_prefix": "",
-            "add_meter_infix": " von ",
-            "add_meter_suffix": " Stromzählern konfiguriert",
+            "add_meter_message": /*SFN*/(have: number, max: number) => `${have} von ${max} Stromzählern konfiguriert`/*NF*/,
             "add_meter_slot": "Nummer",
             "add_meter_class": "Klasse",
 

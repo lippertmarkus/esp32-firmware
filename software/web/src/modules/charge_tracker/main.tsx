@@ -38,6 +38,7 @@ import { useMemo } from "preact/hooks";
 import { NavbarItem } from "../../ts/components/navbar_item";
 import { StatusSection } from "../../ts/components/status_section";
 import { BatteryCharging, Calendar, Clock, Download, User, List } from "react-feather";
+import { useEffect } from "react";
 
 export function ChargeTrackerNavbar() {
     return <NavbarItem name="charge_tracker" module="charge_tracker" title={__("charge_tracker.navbar.charge_tracker")} symbol={<List />} />;
@@ -54,7 +55,7 @@ interface S {
     start_date: Date;
     end_date: Date;
     file_type: string;
-    pdf_text: string;
+    pdf_letterhead: string;
     csv_flavor: "excel" | "rfc4180";
     show_spinner: boolean;
     last_charges: Readonly<Charge[]>;
@@ -145,8 +146,13 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
         });
 
         util.addApiEventListener('charge_tracker/config', () => {
-            let conf = API.get('charge_tracker/config');
-            this.setState({electricity_price: conf.electricity_price});
+            let config = API.get('charge_tracker/config');
+            this.setState({electricity_price: config.electricity_price});
+        });
+
+        util.addApiEventListener('charge_tracker/pdf_letterhead_config', () => {
+            let pdf_letterhead_config = API.get('charge_tracker/pdf_letterhead_config');
+            this.setState({pdf_letterhead: pdf_letterhead_config.letterhead});
         });
     }
 
@@ -290,15 +296,15 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
                 }
 
                 if (flavor == 'excel')
-                    util.downloadToFile(util.win1252Encode(result), __("charge_tracker.content.charge_log_file"), "csv", "text/csv; charset=windows-1252; header=present");
+                    util.downloadToTimestampedFile(util.win1252Encode(result), __("charge_tracker.content.charge_log_file"), "csv", "text/csv; charset=windows-1252; header=present");
                 else
-                    util.downloadToFile(result, __("charge_tracker.content.charge_log_file"), "csv", "text/csv; charset=utf-8; header=present");
+                    util.downloadToTimestampedFile(result, __("charge_tracker.content.charge_log_file"), "csv", "text/csv; charset=utf-8; header=present");
             })
             .catch(err => util.add_alert("download-charge-log", "danger", () => __("charge_tracker.script.download_charge_log_failed"), err));
     }
 
     override async isSaveAllowed(cfg: ChargeTrackerConfig) {
-        return cfg.electricity_price == 0 || cfg.electricity_price >= 100
+        return cfg.electricity_price == 0 || cfg.electricity_price >= 100;
     }
 
     render(props: {}, state: Readonly<ChargeTrackerState> & ChargeTrackerConfig) {
@@ -306,11 +312,6 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
             return <SubPage name="charge_tracker" />;
 
         // TODO show hint that day ahead prices are not used here!
-
-//#if MODULE_POWER_MANAGER_AVAILABLE
-        let pv_enabled = false;
-//#endif
-        pv_enabled = API.get('power_manager/config').excess_charging_enable;
 
         let dap_enabled = false;
 //#if MODULE_DAY_AHEAD_PRICES_AVAILABLE
@@ -320,7 +321,7 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
         return (
             <SubPage name="charge_tracker">
                 <ConfigForm id="charge_tracker_config_form" title={__("charge_tracker.content.charge_tracker")} isModified={this.isModified()} isDirty={this.isDirty()} onSave={this.save} onReset={this.reset} onDirtyChange={this.setDirty}>
-                    <FormRow label={__("charge_tracker.content.price")} warning={__("charge_tracker.content.price_not_dynamic_yet")(dap_enabled, pv_enabled)} show_warning={true}>
+                    <FormRow label={__("charge_tracker.content.price")} warning={__("charge_tracker.content.price_not_dynamic_yet")(dap_enabled)} show_warning={true}>
                         <InputFloat class={state.electricity_price == 0 || state.electricity_price >= 100 ? "" : "is-invalid"} value={state.electricity_price} onValue={this.set('electricity_price')} digits={2} unit="ct/kWh" max={65535} min={0}/>
                         <div class="invalid-feedback">{__("charge_tracker.content.price_invalid")}</div>
                     </FormRow>
@@ -372,13 +373,13 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
 
                 <Collapse in={state.file_type == "0"}>
                     <div>
-                        <FormRow label={__("charge_tracker.content.pdf_text")} label_muted={__("charge_tracker.content.pdf_text_muted")}>
-                            <textarea name="test" class="text-monospace form-control" id="test" value={state.pdf_text} onInput={(e) => {
+                        <FormRow label={__("charge_tracker.content.pdf_letterhead")} label_muted={__("charge_tracker.content.pdf_letterhead_muted")}>
+                            <textarea name="letterhead" class="text-monospace form-control" id="letterhead" value={state.pdf_letterhead} onInput={(e) => {
                                 let value = (e.target as HTMLInputElement).value;
-                                if (new Blob([value]).size < 500)
-                                    this.setState({pdf_text: value});
+                                if (new Blob([value]).size < 512)
+                                    this.setState({pdf_letterhead: value});
                                 else
-                                    this.setState({pdf_text: state.pdf_text});
+                                    this.setState({pdf_letterhead: state.pdf_letterhead});
                             }} cols={30} rows={6}/>
                         </FormRow>
 
@@ -404,9 +405,9 @@ export class ChargeTracker extends ConfigComponent<'charge_tracker/config', {sta
                                         start_timestamp_min: start.getTime() / 1000 / 60,
                                         end_timestamp_min: end.getTime() / 1000 / 60,
                                         user_filter: parseInt(state.user_filter),
-                                        letterhead: state.pdf_text
+                                        letterhead: state.pdf_letterhead,
                                     }, () => __("charge_tracker.script.download_charge_log_failed"), undefined, 2 * 60 * 1000);
-                                    util.downloadToFile(pdf, __("charge_tracker.content.charge_log_file"), "pdf", "application/pdf");
+                                    util.downloadToTimestampedFile(pdf, __("charge_tracker.content.charge_log_file"), "pdf", "application/pdf");
                                 } finally {
                                     this.setState({show_spinner: false});
                                 }

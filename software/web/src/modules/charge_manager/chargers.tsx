@@ -46,7 +46,7 @@ interface ChargersState {
     managementEnabled: boolean
     showExpert: boolean
     scanResult: Readonly<ScanCharger[]>
-    invalid: boolean
+    chargersInvalid: boolean
 //#if MODULE_EM_PHASE_SWITCHER_AVAILABLE
     emCharger: API.getType['em_phase_switcher/charger_config']
     emConfig: API.getType['energy_manager/config']
@@ -62,8 +62,9 @@ export function get_managed_chargers(): [string, string][] {
 }
 
 
-export class ChargeManagerChargers extends ConfigComponent<'charge_manager/config', {status_ref?: RefObject<ChargeManagerStatus>}, ChargersState> {
-    intervalID: number = null;
+export class ChargeManagerChargers extends ConfigComponent<'charge_manager/config', {status_ref?: RefObject<ChargeManagerStatus>}, ChargersState>
+{
+    scan_interval_id: number = null;
 
     constructor() {
         super('charge_manager/config',
@@ -73,7 +74,8 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                   editCharger: {host: "", name: "", rot: -1},
                   managementEnabled: false,
                   showExpert: false,
-                  scanResult: []
+                  scanResult: [],
+                  chargersInvalid: false,
               });
 
         // Does not check if the event exists, in case the evse module is not compiled in.
@@ -98,11 +100,6 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
             this.setState({emConfig: ev.data});
         });
 //#endif
-
-        this.state = {
-            ...this.state,
-            invalid: false,
-        };
     }
 
     addScanResults(result: ScanCharger[]) {
@@ -160,19 +157,25 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
 
     override async isSaveAllowed(cfg: ChargeManagerConfig): Promise<boolean> {
         if (API.hasModule("em_phase_switcher") && this.state.managementEnabled && cfg.chargers.length != 1) {
+            this.setState({chargersInvalid: true});
             return false;
         }
 
-        if (API.hasModule("em_common") && this.state.enable_charge_manager && cfg.chargers.length === 0) {
-            this.setState({invalid: true});
+        if (this.state.enable_charge_manager && cfg.chargers.length === 0) {
+            this.setState({chargersInvalid: true});
             return false;
         }
 
-        // Check for duplicat host entries
-        for (let i = 0; i < cfg.chargers.length; i++)
-            for (let a = i + 1; a < cfg.chargers.length; a++)
-                if (cfg.chargers[a].host == cfg.chargers[i].host)
+        // Check for duplicate host entries
+        for (let i = 0; i < cfg.chargers.length; i++) {
+            for (let a = i + 1; a < cfg.chargers.length; a++) {
+                if (cfg.chargers[a].host == cfg.chargers[i].host) {
+                    this.setState({chargersInvalid: true});
                     return false;
+                }
+            }
+        }
+
         return true;
     }
 
@@ -397,7 +400,7 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
 
         let chargers = <FormRow label={__("charge_manager.content.managed_boxes")}>
                     <Table
-                        invalid={this.state.invalid}
+                        invalid={this.state.chargersInvalid}
                         invalidFeedback={__("charge_manager.content.add_charger_invalid_feedback")}
                         columnNames={[__("charge_manager.content.table_charger_name"), __("charge_manager.content.table_charger_host"), __("charge_manager.content.table_charger_rotation")]}
                         rows={state.chargers.map((charger, i) =>
@@ -457,11 +460,11 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                         }
                         addEnabled={state.chargers.length < MAX_CONTROLLED_CHARGERS}
                         addTitle={__("charge_manager.content.add_charger_title")}
-                        addMessage={__("charge_manager.content.add_charger_count")(state.chargers.length, MAX_CONTROLLED_CHARGERS)}
+                        addMessage={__("charge_manager.content.add_charger_message")(state.chargers.length, MAX_CONTROLLED_CHARGERS)}
                         onAddShow={async () => {
                             this.setState({addCharger: {name: "", host: "", rot: -1}});
                             this.scan_services();
-                            this.intervalID = window.setInterval(this.scan_services, 3000);
+                            this.scan_interval_id = setInterval(this.scan_services, 3000);
                         }}
                         onAddGetChildren={() => [<>
                             <FormRow label={__("charge_manager.content.add_charger_name")}>
@@ -522,11 +525,11 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                             </FormRow>
                         </>]}
                         onAddSubmit={async () => {
-                            this.setState({chargers: state.chargers.concat(state.addCharger), invalid: false});
+                            this.setState({chargers: state.chargers.concat(state.addCharger), chargersInvalid: false});
                             this.setDirty(true);
                         }}
                         onAddHide={async () => {
-                            window.clearInterval(this.intervalID);
+                            clearInterval(this.scan_interval_id);
                         }} />
             </FormRow>
 
@@ -589,9 +592,7 @@ export class ChargeManagerChargers extends ConfigComponent<'charge_manager/confi
                 <div>
                     <FormRow label=""
                              error={__("charge_manager.content.em_proxy_warning_too_many")} show_error={state.chargers.length > 1}
-                             warning={__("charge_manager.content.em_proxy_warning_not_enough")} show_warning={state.chargers.length < 1}>
-                        <></>
-                    </FormRow>
+                             warning={__("charge_manager.content.em_proxy_warning_not_enough")} show_warning={state.chargers.length < 1} />
                 </div>
             </Collapse>
         </>

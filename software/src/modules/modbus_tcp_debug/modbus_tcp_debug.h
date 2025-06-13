@@ -31,11 +31,11 @@ public:
 
     void pre_setup() override;
     void register_urls() override;
-    void loop() override;
 
 private:
-    ConfigRoot transact;
-    TFGenericTCPSharedClient *connected_client = nullptr;
-    bool release_client = false;
+    void release_client();
+
+    ConfigRoot transact_config;
+    TFGenericTCPSharedClient *transact_client = nullptr;
     uint16_t *transact_buffer = nullptr;
 };

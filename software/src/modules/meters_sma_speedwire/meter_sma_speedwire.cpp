@@ -17,7 +17,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#define EVENT_LOG_PREFIX "meters_sma_swire"
+#define EVENT_LOG_PREFIX "meters_speedwire"
 
 #include "meter_sma_speedwire.h"
 
@@ -157,15 +157,9 @@ MeterClassID MeterSMASpeedwire::get_class() const
     return MeterClassID::SMASpeedwire;
 }
 
-void MeterSMASpeedwire::setup(Config */*ephemeral_config*/)
+void MeterSMASpeedwire::setup(Config *ephemeral_config)
 {
-    IPAddress mc_groupIP(239, 12, 255, 254);
-    if (udp.beginMulticast(mc_groupIP, 9522)) {
-        logger.printfln_meter("Joined multicast group %s:9522", mc_groupIP.toString().c_str());
-    } else {
-        logger.printfln_meter("Couldn't join multicast group %s:9522", mc_groupIP.toString().c_str());
-        return;
-    }
+    serial_number = ephemeral_config->get("serial_number")->asUint();
 
     MeterValueID valueIds[METERS_SMA_SPEEDWIRE_VALUE_COUNT];
 
@@ -183,12 +177,33 @@ void MeterSMASpeedwire::setup(Config */*ephemeral_config*/)
     valueIds[METERS_SMA_SPEEDWIRE_VALUE_COUNT - 1] = MeterValueID::PowerActiveLSumImExDiff;
 
     meters.declare_value_ids(slot, valueIds, ARRAY_SIZE(valueIds));
+}
 
-    // Tested Speedwire products send one packet per second.
-    // Poll twice a second to reduce latency and packet backlog.
-    task_scheduler.scheduleWithFixedDelay([this]() {
-        parse_packet();
-    }, 500_ms);
+void MeterSMASpeedwire::register_events()
+{
+    network.on_network_connected([this](const Config *connected) {
+        if (!connected->asBool()) {
+            return EventResult::OK; // Try again on next connected event.
+        }
+
+        const char *group = "239.12.255.254";
+        uint16_t port = 9522;
+
+        if (!udp.beginMulticast({group}, port)) {
+            logger.printfln_meter("Couldn't join multicast group %s:%u", group, port);
+            return EventResult::OK; // Try again on next connected event.
+        }
+
+        logger.printfln_meter("Joined multicast group %s:%u", group, port);
+
+        // Tested Speedwire products send one packet per second.
+        // Poll twice a second to reduce latency and packet backlog.
+        task_scheduler.scheduleWithFixedDelay([this]() {
+            parse_packet();
+        }, 500_ms);
+
+        return EventResult::Deregister;
+    });
 }
 
 int MeterSMASpeedwire::parse_header(SpeedwireHeader *header)
@@ -215,7 +230,11 @@ int MeterSMASpeedwire::parse_header(SpeedwireHeader *header)
                           header->protocol_id,
                           header->susy_id,
                           header->serial_number,
-                          header->measuring_time);
+                          header->measuring_time); // FIXME: also trace data
+
+    if (serial_number != 0 && header->serial_number != serial_number) {
+        return 0;
+    }
 
     if (header->vendor[0] != 'S' || header->vendor[1] != 'M' || header->vendor[2] != 'A' || header->vendor[3] != '\0') {
         logger.printfln_meter("Invalid vendor: %c%c%c", header->vendor[0], header->vendor[1], header->vendor[2]);
@@ -241,6 +260,12 @@ int MeterSMASpeedwire::parse_header(SpeedwireHeader *header)
     // See e.g. https://github.com/erijo/energy-utils/blob/master/sma.py#L194
     // We ignore these packets for now.
     if (header->protocol_id == 0x6065) {
+        return 0;
+    }
+
+    // Protocol ID 0x6081 is used for communication between SMA devices and SMA EV Charger.
+    // We ignore these packets for now.
+    if (header->protocol_id == 0x6081) {
         return 0;
     }
 
@@ -279,11 +304,14 @@ void MeterSMASpeedwire::parse_packet()
 
         for (size_t i = 0; i < ARRAY_SIZE(obis_value_positions); i++) {
             size_t position = obis_value_positions[i];
-            if (position > 0) {
-                auto mapping = obis_value_mappings[i];
-                values[i] = mapping.parser_fn(packet.data + position) * mapping.scaling_factor;
-            } else {
+            if (position == 0) {
                 values[i] = NAN;
+            } else if (position >= static_cast<size_t>(data_length)) {
+                logger.printfln_meter("Access beyond data length for OBIS value %zu: position %zu >= %i", i, position, data_length);
+                values[i] = NAN;
+            } else {
+                const obis_value_mapping &mapping = obis_value_mappings[i];
+                values[i] = mapping.parser_fn(packet.data + position) * mapping.scaling_factor;
             }
         }
 
@@ -303,8 +331,14 @@ void MeterSMASpeedwire::parse_values(const uint8_t *buf, int buflen)
             if (obis_code.u32 == obis_value_mappings[i].obis.u32) {
                 pos += 4;
                 obis_value_positions[i] = static_cast<size_t>(pos);
-                break;
+                goto value_found;
             }
         }
+
+        // OBIS value not found, set position to 0.
+        obis_value_positions[i] = 0;
+
+value_found:
+        {}
     }
 }

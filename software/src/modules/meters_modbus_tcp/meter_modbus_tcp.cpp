@@ -31,6 +31,8 @@
 #include "modules/modbus_tcp_client/modbus_tcp_tools.h"
 #include "modules/modbus_tcp_client/modbus_register_address_mode.enum.h"
 #include "meters_modbus_tcp_defs.inc"
+#include "tools/float.h"
+#include "tools/sun_spec.h"
 
 #include "gcc_warnings.h"
 
@@ -65,6 +67,25 @@
 #define DEYE_HYBRID_INVERTER_PV3_CURRENT_ADDRESS                           static_cast<size_t>(DeyeHybridInverterPVAddress::PV3Current)
 #define DEYE_HYBRID_INVERTER_PV4_VOLTAGE_ADDRESS                           static_cast<size_t>(DeyeHybridInverterPVAddress::PV4Voltage)
 #define DEYE_HYBRID_INVERTER_PV4_CURRENT_ADDRESS                           static_cast<size_t>(DeyeHybridInverterPVAddress::PV4Current)
+
+#define ALPHA_ESS_HYBRID_INVERTER_PV1_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV1Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV1_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV1Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV1_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV1Power)
+#define ALPHA_ESS_HYBRID_INVERTER_PV2_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV2Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV2_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV2Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV2_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV2Power)
+#define ALPHA_ESS_HYBRID_INVERTER_PV3_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV3Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV3_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV3Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV3_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV3Power)
+#define ALPHA_ESS_HYBRID_INVERTER_PV4_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV4Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV4_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV4Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV4_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV4Power)
+#define ALPHA_ESS_HYBRID_INVERTER_PV5_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV5Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV5_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV5Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV5_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV5Power)
+#define ALPHA_ESS_HYBRID_INVERTER_PV6_VOLTAGE_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV6Voltage)
+#define ALPHA_ESS_HYBRID_INVERTER_PV6_CURRENT_ADDRESS                      static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV6Current)
+#define ALPHA_ESS_HYBRID_INVERTER_PV6_POWER_ADDRESS                        static_cast<size_t>(AlphaESSHybridInverterPVAddress::PV6Power)
 
 #define SHELLY_PRO_XEM_MONOPHASE_CHANNEL_1_ACTIVE_POWER                    static_cast<size_t>(ShellyEMMonophaseChannel1AsL1Address::Channel1ActivePower)
 #define SHELLY_PRO_XEM_MONOPHASE_CHANNEL_1_TOTAL_ACTIVE_ENERGY             static_cast<size_t>(ShellyEMMonophaseChannel1AsL1Address::Channel1TotalActiveEnergyPerpetualCount)
@@ -105,6 +126,25 @@
 #define FRONIUS_GEN24_PLUS_CHASTATE_ADDRESS                                static_cast<size_t>(FroniusGEN24PlusBatteryIntegerAddress::ChaState)
 #define FRONIUS_GEN24_PLUS_CHASTATE_SF_ADDRESS                             static_cast<size_t>(FroniusGEN24PlusBatteryIntegerAddress::ChaState_SF)
 
+#define HAILEI_HYBRID_INVERTER_PV1_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV1Voltage)
+#define HAILEI_HYBRID_INVERTER_PV1_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV1Current)
+#define HAILEI_HYBRID_INVERTER_PV1_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV1Power)
+#define HAILEI_HYBRID_INVERTER_PV2_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV2Voltage)
+#define HAILEI_HYBRID_INVERTER_PV2_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV2Current)
+#define HAILEI_HYBRID_INVERTER_PV2_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV2Power)
+#define HAILEI_HYBRID_INVERTER_PV3_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV3Voltage)
+#define HAILEI_HYBRID_INVERTER_PV3_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV3Current)
+#define HAILEI_HYBRID_INVERTER_PV3_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV3Power)
+#define HAILEI_HYBRID_INVERTER_PV4_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV4Voltage)
+#define HAILEI_HYBRID_INVERTER_PV4_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV4Current)
+#define HAILEI_HYBRID_INVERTER_PV4_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV4Power)
+#define HAILEI_HYBRID_INVERTER_PV5_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV5Voltage)
+#define HAILEI_HYBRID_INVERTER_PV5_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV5Current)
+#define HAILEI_HYBRID_INVERTER_PV5_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV5Power)
+#define HAILEI_HYBRID_INVERTER_PV6_VOLTAGE_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV6Voltage)
+#define HAILEI_HYBRID_INVERTER_PV6_CURRENT_ADDRESS                         static_cast<size_t>(HaileiHybridInverterPVAddress::PV6Current)
+#define HAILEI_HYBRID_INVERTER_PV6_POWER_ADDRESS                           static_cast<size_t>(HaileiHybridInverterPVAddress::PV6Power)
+
 #define CARLO_GAVAZZI_EM100_OR_ET100_W                                     static_cast<size_t>(CarloGavazziEM100andET100AtL1Address::W)
 #define CARLO_GAVAZZI_EM100_OR_ET100_KWH_POSITIVE_TOTAL                    static_cast<size_t>(CarloGavazziEM100andET100AtL1Address::KWhPositiveTotal)
 #define CARLO_GAVAZZI_EM100_OR_ET100_KWH_NEGATIVE_TOTAL                    static_cast<size_t>(CarloGavazziEM100andET100AtL1Address::KWhNegativeTotal)
@@ -135,6 +175,11 @@
 
 #define HUAWEI_SUN2000_INPUT_POWER_ADDRESS                                 static_cast<size_t>(HuaweiSUN2000PVNoStringsAddress::InputPower)
 
+#define HUAWEI_SUN2000_SMART_DONGLE_INPUT_POWER_ADDRESS                    static_cast<size_t>(HuaweiSUN2000SmartDonglePVAddress::InputPower)
+
+#define HUAWEI_EMMA_LOAD_POWER_ADDRESS                                     static_cast<size_t>(HuaweiEMMALoadAddress::LoadPower)
+
+#define HUAWEI_EMMA_PV_OUTPUT_POWER_ADDRESS                                static_cast<size_t>(HuaweiEMMAPVAddress::PVOutputPower)
 
 #define MODBUS_VALUE_TYPE_TO_REGISTER_COUNT(x) (static_cast<uint8_t>(x) & 0x07)
 #define MODBUS_VALUE_TYPE_TO_REGISTER_ORDER_LE(x) ((static_cast<uint8_t>(x) >> 5) & 1)
@@ -144,88 +189,6 @@
         meters_modbus_tcp.trace_timestamp(); \
         logger.tracefln_plain(trace_buffer_index, fmt __VA_OPT__(,) __VA_ARGS__); \
     } while (0)
-
-static const float fronius_scale_factors[21] = {
-              0.0000000001f,    // 10^-10
-              0.000000001f,     // 10^-9
-              0.00000001f,      // 10^-8
-              0.0000001f,       // 10^-7
-              0.000001f,        // 10^-6
-              0.00001f,         // 10^-5
-              0.0001f,          // 10^-4
-              0.001f,           // 10^-3
-              0.01f,            // 10^-2
-              0.1f,             // 10^-1
-              1.0f,             // 10^0
-             10.0f,             // 10^1
-            100.0f,             // 10^2
-           1000.0f,             // 10^3
-          10000.0f,             // 10^4
-         100000.0f,             // 10^5
-        1000000.0f,             // 10^6
-       10000000.0f,             // 10^7
-      100000000.0f,             // 10^8
-     1000000000.0f,             // 10^9
-    10000000000.0f,             // 10^10
-};
-
-static float get_fronius_scale_factor(int16_t sf)
-{
-    if (sf < -10) {
-        if (sf == INT16_MIN) { // scale factor not implemented
-            return 1;
-        } else {
-            return NAN;
-        }
-    } else if (sf > 10) {
-        return NAN;
-    }
-
-    return fronius_scale_factors[sf + 10];
-}
-
-static float nan_safe_sum(float a, float b)
-{
-    if (isnan(a)) {
-        return b;
-    }
-
-    if (isnan(b)) {
-        return a;
-    }
-
-    return a + b;
-}
-
-static float nan_safe_avg(float a, float b)
-{
-    if (isnan(a)) {
-        return b;
-    }
-
-    if (isnan(b)) {
-        return a;
-    }
-
-    return (a + b) / 2.0f;
-}
-
-static float zero_safe_negation(float f)
-{
-    #if defined(__GNUC__)
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wfloat-equal"
-#endif
-    if (f != 0.0f) { // Really compare exactly with 0.0f
-#if defined(__GNUC__)
-    #pragma GCC diagnostic pop
-#endif
-        // Don't convert 0.0f into -0.0f
-        f *= -1.0f;
-    }
-
-    return f;
-}
 
 MeterClassID MeterModbusTCP::get_class() const
 {
@@ -243,7 +206,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
     switch (table_id) {
     case MeterModbusTCPTableID::None:
         logger.printfln_meter("No table selected");
-        return;
+        break;
 
     case MeterModbusTCPTableID::Custom: {
             device_address = static_cast<uint8_t>(ephemeral_config->get("table")->get()->get("device_address")->asUint());
@@ -252,35 +215,35 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
             size_t registers_count = registers->count();
 
             // FIXME: leaking this, because as of right now meter instances don't get destroyed
-            ValueSpec *customs_specs = new ValueSpec[registers_count];
-            MeterValueID *customs_ids = new MeterValueID[registers_count];
-            uint32_t *customs_index = new uint32_t[registers_count];
+            TableSpec *custom_table = new TableSpec;
+            ValueSpec *custom_specs = new ValueSpec[registers_count];
+            MeterValueID *custom_ids = new MeterValueID[registers_count];
+            uint32_t *custom_index = new uint32_t[registers_count];
 
             for (size_t i = 0; i < registers_count; ++i) {
                 MeterValueID value_id = registers->get(i)->get("id")->asEnum<MeterValueID>();
 
-                customs_specs[i].name = getMeterValueName(value_id);
-                customs_specs[i].register_type = registers->get(i)->get("rtype")->asEnum<ModbusRegisterType>();
-                customs_specs[i].start_address = registers->get(i)->get("addr")->asUint();
-                customs_specs[i].value_type = registers->get(i)->get("vtype")->asEnum<ModbusValueType>();
-                customs_specs[i].drop_sign = false; // FIXME: expose in API?
-                customs_specs[i].offset = registers->get(i)->get("off")->asFloat();
-                customs_specs[i].scale_factor = registers->get(i)->get("scale")->asFloat();
+                custom_specs[i].name = getMeterValueName(value_id);
+                custom_specs[i].register_type = registers->get(i)->get("rtype")->asEnum<ModbusRegisterType>();
+                custom_specs[i].start_address = registers->get(i)->get("addr")->asUint();
+                custom_specs[i].value_type = registers->get(i)->get("vtype")->asEnum<ModbusValueType>();
+                custom_specs[i].drop_sign = false; // FIXME: expose in API?
+                custom_specs[i].offset = registers->get(i)->get("off")->asFloat();
+                custom_specs[i].scale_factor = registers->get(i)->get("scale")->asFloat();
 
-                customs_ids[i] = value_id;
+                custom_ids[i] = value_id;
 
-                customs_index[i] = i;
+                custom_index[i] = i;
             }
 
             // FIXME: leaking this, because as of right now meter instances don't get destroyed
-            custom.table = new ValueTable;
-            custom.table->specs = customs_specs;
-            custom.table->specs_length = registers_count;
-            custom.table->ids = customs_ids;
-            custom.table->ids_length = registers_count;
-            custom.table->index = customs_index;
+            custom_table->specs = custom_specs;
+            custom_table->specs_length = registers_count;
+            custom_table->ids = custom_ids;
+            custom_table->ids_length = registers_count;
+            custom_table->index = custom_index;
 
-            table = custom.table;
+            table = custom_table;
         }
 
         break;
@@ -293,7 +256,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (sungrow_hybrid_inverter.virtual_meter) {
         case SungrowHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Sungrow Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case SungrowHybridInverterVirtualMeter::Inverter:
             table = &sungrow_inverter_output_type_table;
@@ -317,7 +280,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Sungrow Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(sungrow_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -330,7 +293,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (sungrow_string_inverter.virtual_meter) {
         case SungrowStringInverterVirtualMeter::None:
             logger.printfln_meter("No Sungrow String Inverter Virtual Meter selected");
-            return;
+            break;
 
         case SungrowStringInverterVirtualMeter::Inverter:
             table = &sungrow_inverter_output_type_table;
@@ -349,7 +312,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Sungrow String Inverter Virtual Meter: %u", static_cast<uint8_t>(sungrow_string_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -361,7 +324,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (solarmax_max_storage.virtual_meter) {
         case SolarmaxMaxStorageVirtualMeter::None:
             logger.printfln_meter("No Solarmax Max Storage Virtual Meter selected");
-            return;
+            break;
 
         case SolarmaxMaxStorageVirtualMeter::Inverter:
             table = &solarmax_max_storage_inverter_table;
@@ -380,7 +343,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Solarmax Max Storage Virtual Meter: %u", static_cast<uint8_t>(solarmax_max_storage.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -392,7 +355,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (victron_energy_gx.virtual_meter) {
         case VictronEnergyGXVirtualMeter::None:
             logger.printfln_meter("No Victron Energy GX Virtual Meter selected");
-            return;
+            break;
 
         case VictronEnergyGXVirtualMeter::Inverter:
             table = &victron_energy_gx_inverter_table;
@@ -416,7 +379,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Victron Energy GX Virtual Meter: %u", static_cast<uint8_t>(victron_energy_gx.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -429,7 +392,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (deye_hybrid_inverter.virtual_meter) {
         case DeyeHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Deye Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case DeyeHybridInverterVirtualMeter::Inverter:
             table = &deye_hybrid_inverter_table;
@@ -458,7 +421,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Deye Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(deye_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -470,7 +433,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (alpha_ess_hybrid_inverter.virtual_meter) {
         case AlphaESSHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Alpha ESS Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case AlphaESSHybridInverterVirtualMeter::Inverter:
             table = &alpha_ess_hybrid_inverter_table;
@@ -487,9 +450,14 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
             default_location = MeterLocation::Battery;
             break;
 
+        case AlphaESSHybridInverterVirtualMeter::PV:
+            table = &alpha_ess_hybrid_inverter_pv_table;
+            default_location = MeterLocation::PV;
+            break;
+
         default:
             logger.printfln_meter("Unknown Alpha ESS Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(alpha_ess_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -502,13 +470,13 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (shelly_pro_em.monophase_channel) {
         case ShellyEMMonophaseChannel::None:
             logger.printfln_meter("No Shelly Pro EM Monophase Channel selected");
-            return;
+            break;
 
         case ShellyEMMonophaseChannel::First:
             switch (shelly_pro_em.monophase_mapping) {
             case ShellyEMMonophaseMapping::None:
                 logger.printfln_meter("No Shelly Pro EM Monophase Mapping selected");
-                return;
+                break;
 
             case ShellyEMMonophaseMapping::L1:
                 table = &shelly_em_monophase_channel_1_as_l1_table;
@@ -524,7 +492,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
             default:
                 logger.printfln_meter("Unknown Shelly Pro EM Monophase Mapping: %u", static_cast<uint8_t>(shelly_pro_em.monophase_mapping));
-                return;
+                break;
             }
 
             break;
@@ -533,7 +501,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
             switch (shelly_pro_em.monophase_mapping) {
             case ShellyEMMonophaseMapping::None:
                 logger.printfln_meter("No Shelly Pro EM Monophase Mapping selected");
-                return;
+                break;
 
             case ShellyEMMonophaseMapping::L1:
                 table = &shelly_em_monophase_channel_2_as_l1_table;
@@ -549,18 +517,18 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
             default:
                 logger.printfln_meter("Unknown Shelly Pro EM Monophase Mapping: %u", static_cast<uint8_t>(shelly_pro_em.monophase_mapping));
-                return;
+                break;
             }
 
             break;
 
         case ShellyEMMonophaseChannel::Third:
             logger.printfln_meter("Impossible Shelly Pro EM Monophase Channel selected: Third");
-            return;
+            break;
 
         default:
             logger.printfln_meter("Unknown Shelly Pro EM Monophase Channel: %u", static_cast<uint8_t>(shelly_pro_em.monophase_channel));
-            return;
+            break;
         }
 
         break;
@@ -580,13 +548,13 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
             switch (shelly_pro_3em.monophase_channel) {
             case ShellyEMMonophaseChannel::None:
                 logger.printfln_meter("No Shelly Pro 3EM Monophase Channel selected");
-                return;
+                break;
 
             case ShellyEMMonophaseChannel::First:
                 switch (shelly_pro_3em.monophase_mapping) {
                 case ShellyEMMonophaseMapping::None:
                     logger.printfln_meter("No Shelly Pro 3EM Monophase Mapping selected");
-                    return;
+                    break;
 
                 case ShellyEMMonophaseMapping::L1:
                     table = &shelly_em_monophase_channel_1_as_l1_table;
@@ -602,7 +570,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
                 default:
                     logger.printfln_meter("Unknown Shelly Pro 3EM Monophase Mapping: %u", static_cast<uint8_t>(shelly_pro_3em.monophase_mapping));
-                    return;
+                    break;
                 }
 
                 break;
@@ -611,7 +579,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
                 switch (shelly_pro_3em.monophase_mapping) {
                 case ShellyEMMonophaseMapping::None:
                     logger.printfln_meter("No Shelly Pro 3EM Monophase Mapping selected");
-                    return;
+                    break;
 
                 case ShellyEMMonophaseMapping::L1:
                     table = &shelly_em_monophase_channel_2_as_l1_table;
@@ -627,7 +595,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
                 default:
                     logger.printfln_meter("Unknown Shelly Pro 3EM Monophase Mapping: %u", static_cast<uint8_t>(shelly_pro_3em.monophase_mapping));
-                    return;
+                    break;
                 }
 
                 break;
@@ -636,7 +604,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
                 switch (shelly_pro_3em.monophase_mapping) {
                 case ShellyEMMonophaseMapping::None:
                     logger.printfln_meter("No Shelly Pro 3EM Monophase Mapping selected");
-                    return;
+                    break;
 
                 case ShellyEMMonophaseMapping::L1:
                     table = &shelly_em_monophase_channel_3_as_l1_table;
@@ -652,21 +620,21 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
                 default:
                     logger.printfln_meter("Unknown Shelly Pro 3EM Monophase Mapping: %u", static_cast<uint8_t>(shelly_pro_3em.monophase_mapping));
-                    return;
+                    break;
                 }
 
                 break;
 
             default:
                 logger.printfln_meter("Unknown Shelly Pro 3EM Monophase Channel: %u", static_cast<uint8_t>(shelly_pro_3em.monophase_channel));
-                return;
+                break;
             }
 
             break;
 
         default:
             logger.printfln_meter("Unknown Shelly Pro 3EM Device Profile: %u", static_cast<uint8_t>(shelly_pro_3em.device_profile));
-            return;
+            break;
         }
 
         break;
@@ -678,7 +646,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (goodwe_hybrid_inverter.virtual_meter) {
         case GoodweHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Goodwe Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case GoodweHybridInverterVirtualMeter::Inverter:
             table = &goodwe_hybrid_inverter_table;
@@ -712,7 +680,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Goodwe Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(goodwe_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -724,7 +692,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (solax_hybrid_inverter.virtual_meter) {
         case SolaxHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Solax Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case SolaxHybridInverterVirtualMeter::Inverter:
             table = &solax_hybrid_inverter_table;
@@ -743,30 +711,30 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Solax Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(solax_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
 
     case MeterModbusTCPTableID::FroniusGEN24Plus:
         fronius_gen24_plus.virtual_meter = ephemeral_config->get("table")->get()->get("virtual_meter")->asEnum<FroniusGEN24PlusVirtualMeter>();
-        fronius_gen24_plus.input_id_or_model_id = 0;
+        fronius_gen24_plus.input_id_or_model_id = -1;
         device_address = static_cast<uint8_t>(ephemeral_config->get("table")->get()->get("device_address")->asUint());
 
         switch (fronius_gen24_plus.virtual_meter) {
         case FroniusGEN24PlusVirtualMeter::None:
             logger.printfln_meter("No Fronius GEN24 Plus Virtual Meter selected");
-            return;
+            break;
 
         case FroniusGEN24PlusVirtualMeter::InverterUnused:
             logger.printfln_meter("Invalid Fronius GEN24 Plus Virtual Meter: %u", static_cast<uint8_t>(fronius_gen24_plus.virtual_meter));
             default_location = MeterLocation::Inverter;
-            return;
+            break;
 
         case FroniusGEN24PlusVirtualMeter::GridUnused:
             logger.printfln_meter("Invalid Fronius GEN24 Plus Virtual Meter: %u", static_cast<uint8_t>(fronius_gen24_plus.virtual_meter));
             default_location = MeterLocation::Grid;
-            return;
+            break;
 
         case FroniusGEN24PlusVirtualMeter::Battery:
             table = &fronius_gen24_plus_battery_type_table;
@@ -775,7 +743,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Fronius GEN24 Plus Virtual Meter: %u", static_cast<uint8_t>(fronius_gen24_plus.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -787,7 +755,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (hailei_hybrid_inverter.virtual_meter) {
         case HaileiHybridInverterVirtualMeter::None:
             logger.printfln_meter("No Hailei Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case HaileiHybridInverterVirtualMeter::Inverter:
             table = &hailei_hybrid_inverter_table;
@@ -804,9 +772,14 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
             default_location = MeterLocation::Battery;
             break;
 
+        case HaileiHybridInverterVirtualMeter::PV:
+            table = &hailei_hybrid_inverter_pv_table;
+            default_location = MeterLocation::PV;
+            break;
+
         default:
             logger.printfln_meter("Unknown Hailei Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(hailei_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -818,7 +791,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (fox_ess_h3_hybrid_inverter.virtual_meter) {
         case FoxESSH3HybridInverterVirtualMeter::None:
             logger.printfln_meter("No Fox ESS H3 Hybrid Inverter Virtual Meter selected");
-            return;
+            break;
 
         case FoxESSH3HybridInverterVirtualMeter::Inverter:
             table = &fox_ess_h3_hybrid_inverter_table;
@@ -837,7 +810,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Fox ESS H3 Hybrid Inverter Virtual Meter: %u", static_cast<uint8_t>(fox_ess_h3_hybrid_inverter.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -891,7 +864,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (carlo_gavazzi_em100.phase) {
         case CarloGavazziPhase::None:
             logger.printfln_meter("No Carlo Gavazzi EM100 Phase selected");
-            return;
+            break;
 
         case CarloGavazziPhase::L1:
             table = &carlo_gavazzi_em100_and_et100_at_l1_table;
@@ -907,7 +880,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Carlo Gavazzi EM100 Phase: %u", static_cast<uint8_t>(carlo_gavazzi_em100.phase));
-            return;
+            break;
         }
 
         break;
@@ -920,7 +893,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (carlo_gavazzi_et100.phase) {
         case CarloGavazziPhase::None:
             logger.printfln_meter("No Carlo Gavazzi ET100 Phase selected");
-            return;
+            break;
 
         case CarloGavazziPhase::L1:
             table = &carlo_gavazzi_em100_and_et100_at_l1_table;
@@ -936,7 +909,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Carlo Gavazzi ET100 Phase: %u", static_cast<uint8_t>(carlo_gavazzi_et100.phase));
-            return;
+            break;
         }
 
         break;
@@ -955,7 +928,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (carlo_gavazzi_em270.virtual_meter) {
         case CarloGavazziEM270VirtualMeter::None:
             logger.printfln_meter("No Carlo Gavazzi EM270 Virtual Meter selected");
-            return;
+            break;
 
         case CarloGavazziEM270VirtualMeter::Meter:
             table = &carlo_gavazzi_em270_and_em280_meter_table;
@@ -971,7 +944,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Carlo Gavazzi EM270 Virtual Meter: %u", static_cast<uint8_t>(carlo_gavazzi_em270.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -984,7 +957,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (carlo_gavazzi_em280.virtual_meter) {
         case CarloGavazziEM280VirtualMeter::None:
             logger.printfln_meter("No Carlo Gavazzi EM280 Virtual Meter selected");
-            return;
+            break;
 
         case CarloGavazziEM280VirtualMeter::Meter:
             table = &carlo_gavazzi_em270_and_em280_meter_table;
@@ -1000,7 +973,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Carlo Gavazzi EM280 Virtual Meter: %u", static_cast<uint8_t>(carlo_gavazzi_em280.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -1025,7 +998,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (carlo_gavazzi_em510.phase) {
         case CarloGavazziPhase::None:
             logger.printfln_meter("No Carlo Gavazzi EM510 Phase selected");
-            return;
+            break;
 
         case CarloGavazziPhase::L1:
             table = &carlo_gavazzi_em510_at_l1_table;
@@ -1041,7 +1014,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Carlo Gavazzi EM510 Phase: %u", static_cast<uint8_t>(carlo_gavazzi_em510.phase));
-            return;
+            break;
         }
 
         break;
@@ -1063,17 +1036,17 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (solaredge.virtual_meter) {
         case SolaredgeVirtualMeter::None:
             logger.printfln_meter("No Solaredge Virtual Meter selected");
-            return;
+            break;
 
         case SolaredgeVirtualMeter::InverterUnused:
             logger.printfln_meter("Invalid Solaredge Virtual Meter: %u", static_cast<uint8_t>(solaredge.virtual_meter));
             default_location = MeterLocation::Inverter;
-            return;
+            break;
 
         case SolaredgeVirtualMeter::GridUnused:
             logger.printfln_meter("Invalid Solaredge Virtual Meter: %u", static_cast<uint8_t>(solaredge.virtual_meter));
             default_location = MeterLocation::Grid;
-            return;
+            break;
 
         case SolaredgeVirtualMeter::Battery:
             table = &solaredge_battery_table;
@@ -1082,7 +1055,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Solaredge Hybrid Virtual Meter: %u", static_cast<uint8_t>(solaredge.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -1106,12 +1079,12 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (sax_power.virtual_meter) {
         case SAXPowerVirtualMeter::None:
             logger.printfln_meter("No SAX Power Home Basic Mode Virtual Meter selected");
-            return;
+            break;
 
         case SAXPowerVirtualMeter::InverterUnused:
             logger.printfln_meter("Invalid SAX Power Home Basic Mode Virtual Meter: %u", static_cast<uint8_t>(sax_power.virtual_meter));
             default_location = MeterLocation::Inverter;
-            return;
+            break;
 
         case SAXPowerVirtualMeter::Grid:
             table = &sax_power_home_basic_mode_grid_table;
@@ -1125,7 +1098,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown SAX Power Home Basic Mode Virtual Meter: %u", static_cast<uint8_t>(sax_power.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -1137,12 +1110,12 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (sax_power.virtual_meter) {
         case SAXPowerVirtualMeter::None:
             logger.printfln_meter("No SAX Power Home Extended Mode Virtual Meter selected");
-            return;
+            break;
 
         case SAXPowerVirtualMeter::InverterUnused:
             logger.printfln_meter("Invalid SAX Power Home Extended Mode Virtual Meter: %u", static_cast<uint8_t>(sax_power.virtual_meter));
             default_location = MeterLocation::Inverter;
-            return;
+            break;
 
         case SAXPowerVirtualMeter::Grid:
             table = &sax_power_home_extended_mode_grid_table;
@@ -1156,7 +1129,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown SAX Power Home Extended Mode Virtual Meter: %u", static_cast<uint8_t>(sax_power.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -1168,12 +1141,12 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (e3dc.virtual_meter) {
         case E3DCVirtualMeter::None:
             logger.printfln_meter("No E3/DC Virtual Meter selected");
-            return;
+            break;
 
         case E3DCVirtualMeter::InverterUnused:
             logger.printfln_meter("Invalid E3/DC Virtual Meter: %u", static_cast<uint8_t>(e3dc.virtual_meter));
             default_location = MeterLocation::Inverter;
-            return;
+            break;
 
         case E3DCVirtualMeter::Grid:
             table = &e3dc_grid_table;
@@ -1202,7 +1175,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown E3/DC Virtual Meter: %u", static_cast<uint8_t>(e3dc.virtual_meter));
-            return;
+            break;
         }
 
         break;
@@ -1216,7 +1189,7 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         switch (huawei_sun2000.virtual_meter) {
         case HuaweiSUN2000VirtualMeter::None:
             logger.printfln_meter("No Huawei SUN2000 Virtual Meter selected");
-            return;
+            break;
 
         case HuaweiSUN2000VirtualMeter::Inverter:
             table = &huawei_sun2000_inverter_table;
@@ -1240,13 +1213,99 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
 
         default:
             logger.printfln_meter("Unknown Huawei SUN2000 Virtual Meter: %u", static_cast<uint8_t>(huawei_sun2000.virtual_meter));
-            return;
+            break;
+        }
+
+        break;
+
+    case MeterModbusTCPTableID::HuaweiSUN2000SmartDongle:
+        huawei_sun2000_smart_dongle.virtual_meter = ephemeral_config->get("table")->get()->get("virtual_meter")->asEnum<HuaweiSUN2000SmartDongleVirtualMeter>();
+        huawei_sun2000_smart_dongle.energy_storage_product_model = -1;
+        device_address = static_cast<uint8_t>(ephemeral_config->get("table")->get()->get("device_address")->asUint());
+
+        switch (huawei_sun2000_smart_dongle.virtual_meter) {
+        case HuaweiSUN2000SmartDongleVirtualMeter::None:
+            logger.printfln_meter("No Huawei SUN2000 Smart Dongle Virtual Meter selected");
+            break;
+
+        case HuaweiSUN2000SmartDongleVirtualMeter::InverterUnused:
+            logger.printfln_meter("Invalid Huawei SUN2000 Smart Dongle Virtual Meter: %u", static_cast<uint8_t>(huawei_sun2000_smart_dongle.virtual_meter));
+            break;
+
+        case HuaweiSUN2000SmartDongleVirtualMeter::Grid:
+            table = &huawei_sun2000_smart_dongle_grid_table;
+            default_location = MeterLocation::Grid;
+            break;
+
+        case HuaweiSUN2000SmartDongleVirtualMeter::Battery:
+            table = &huawei_sun2000_battery_product_model_table;
+            default_location = MeterLocation::Battery;
+            break;
+
+        case HuaweiSUN2000SmartDongleVirtualMeter::PV:
+            table = &huawei_sun2000_smart_dongle_pv_table;
+            default_location = MeterLocation::PV;
+            break;
+
+        default:
+            logger.printfln_meter("Unknown Huawei SUN2000 Smart Dongle Virtual Meter: %u", static_cast<uint8_t>(huawei_sun2000_smart_dongle.virtual_meter));
+            break;
+        }
+
+        break;
+
+    case MeterModbusTCPTableID::HuaweiEMMA:
+        huawei_emma.virtual_meter = ephemeral_config->get("table")->get()->get("virtual_meter")->asEnum<HuaweiEMMAVirtualMeter>();
+        device_address = static_cast<uint8_t>(ephemeral_config->get("table")->get()->get("device_address")->asUint());
+
+        switch (huawei_emma.virtual_meter) {
+        case HuaweiEMMAVirtualMeter::None:
+            logger.printfln_meter("No Huawei EMMA Virtual Meter selected");
+            break;
+
+        case HuaweiEMMAVirtualMeter::Inverter:
+            table = &huawei_emma_inverter_table;
+            default_location = MeterLocation::Inverter;
+            break;
+
+        case HuaweiEMMAVirtualMeter::GridInternalSensor:
+            table = &huawei_emma_grid_internal_sensor_table;
+            default_location = MeterLocation::Grid;
+            break;
+
+        case HuaweiEMMAVirtualMeter::Battery:
+            table = &huawei_emma_battery_table;
+            default_location = MeterLocation::Battery;
+            break;
+
+        case HuaweiEMMAVirtualMeter::Load:
+            table = &huawei_emma_load_table;
+            default_location = MeterLocation::Load;
+            break;
+
+        case HuaweiEMMAVirtualMeter::PV:
+            table = &huawei_emma_pv_table;
+            default_location = MeterLocation::PV;
+            break;
+
+        case HuaweiEMMAVirtualMeter::GridExternalSensor:
+            table = &huawei_emma_grid_external_sensor_table;
+            default_location = MeterLocation::Grid;
+            break;
+
+        default:
+            logger.printfln_meter("Unknown Huawei EMMA Virtual Meter: %u", static_cast<uint8_t>(huawei_emma.virtual_meter));
+            break;
         }
 
         break;
 
     default:
         logger.printfln_meter("Unknown table: %u", static_cast<uint8_t>(table_id));
+        break;
+    }
+
+    if (table == nullptr) {
         return;
     }
 
@@ -1258,20 +1317,22 @@ void MeterModbusTCP::setup(Config *ephemeral_config)
         meters.declare_value_ids(slot, table->ids, table->ids_length);
     }
 
-    task_scheduler.scheduleWithFixedDelay([this]() {
-        if (read_allowed) {
-            read_next();
-        }
-    }, 2_s, 1_s);
+    if (table->specs_length > 0) {
+        task_scheduler.scheduleWithFixedDelay([this]() {
+            if (read_allowed) {
+                read_next();
+            }
+        }, 2_s, 1_s);
+    }
 }
 
 void MeterModbusTCP::register_events()
 {
-    if (table == nullptr) {
+    if (table == nullptr || table->specs_length == 0) {
         return;
     }
 
-    event.registerEvent("network/state", {"connected"}, [this](const Config *connected) {
+    network.on_network_connected([this](const Config *connected) {
         if (connected->asBool()) {
             start_connection();
         }
@@ -1407,6 +1468,12 @@ bool MeterModbusTCP::is_deye_hybrid_inverter_pv_meter() const
         && deye_hybrid_inverter.virtual_meter == DeyeHybridInverterVirtualMeter::PV;
 }
 
+bool MeterModbusTCP::is_alpha_ess_hybrid_inverter_pv_meter() const
+{
+    return table_id == MeterModbusTCPTableID::AlphaESSHybridInverter
+        && alpha_ess_hybrid_inverter.virtual_meter == AlphaESSHybridInverterVirtualMeter::PV;
+}
+
 bool MeterModbusTCP::is_shelly_pro_xem_monophase() const
 {
     return table_id == MeterModbusTCPTableID::ShellyProEM
@@ -1424,6 +1491,12 @@ bool MeterModbusTCP::is_fronius_gen24_plus_battery_meter() const
 {
     return table_id == MeterModbusTCPTableID::FroniusGEN24Plus
         && fronius_gen24_plus.virtual_meter == FroniusGEN24PlusVirtualMeter::Battery;
+}
+
+bool MeterModbusTCP::is_hailei_hybrid_inverter_pv_meter() const
+{
+    return table_id == MeterModbusTCPTableID::HaileiHybridInverter
+        && hailei_hybrid_inverter.virtual_meter == HaileiHybridInverterVirtualMeter::PV;
 }
 
 bool MeterModbusTCP::is_carlo_gavazzi_em100_or_et100() const
@@ -1459,6 +1532,30 @@ bool MeterModbusTCP::is_huawei_sun2000_pv_meter() const
 {
     return table_id == MeterModbusTCPTableID::HuaweiSUN2000
         && huawei_sun2000.virtual_meter == HuaweiSUN2000VirtualMeter::PV;
+}
+
+bool MeterModbusTCP::is_huawei_sun2000_smart_dongle_battery_meter() const
+{
+    return table_id == MeterModbusTCPTableID::HuaweiSUN2000SmartDongle
+        && huawei_sun2000_smart_dongle.virtual_meter == HuaweiSUN2000SmartDongleVirtualMeter::Battery;
+}
+
+bool MeterModbusTCP::is_huawei_sun2000_smart_dongle_pv_meter() const
+{
+    return table_id == MeterModbusTCPTableID::HuaweiSUN2000SmartDongle
+        && huawei_sun2000_smart_dongle.virtual_meter == HuaweiSUN2000SmartDongleVirtualMeter::PV;
+}
+
+bool MeterModbusTCP::is_huawei_emma_load_meter() const
+{
+    return table_id == MeterModbusTCPTableID::HuaweiEMMA
+        && huawei_emma.virtual_meter == HuaweiEMMAVirtualMeter::Load;
+}
+
+bool MeterModbusTCP::is_huawei_emma_pv_meter() const
+{
+    return table_id == MeterModbusTCPTableID::HuaweiEMMA
+        && huawei_emma.virtual_meter == HuaweiEMMAVirtualMeter::PV;
 }
 
 void MeterModbusTCP::read_done_callback()
@@ -1711,14 +1808,7 @@ void MeterModbusTCP::parse_next()
 
     value += table->specs[read_index].offset;
 
-#if defined(__GNUC__)
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wfloat-equal"
-#endif
-    if (value != 0.0f) { // Really compare exactly with 0.0f
-#if defined(__GNUC__)
-    #pragma GCC diagnostic pop
-#endif
+    if (!is_exactly_zero(value)) {
         // Don't convert 0.0f into -0.0f if the scale factor is negative
         value *= table->specs[read_index].scale_factor;
     }
@@ -1726,6 +1816,8 @@ void MeterModbusTCP::parse_next()
     if (is_sungrow_inverter_meter()
      && generic_read_request.start_address == SUNGROW_INVERTER_OUTPUT_TYPE_ADDRESS) {
         if (sungrow_inverter_output_type < 0) {
+            bool success = true;
+
             switch (c16.u) {
             case 0:
                 if (table_id == MeterModbusTCPTableID::SungrowHybridInverter) {
@@ -1761,14 +1853,16 @@ void MeterModbusTCP::parse_next()
                 break;
 
             default:
-                table = nullptr;
+                success = false;
                 logger.printfln_meter("Sungrow inverter has unknown output type: %u", c16.u);
-                return;
+                break;
             }
 
-            sungrow_inverter_output_type = c16.u;
+            if (success) {
+                sungrow_inverter_output_type = c16.u;
 
-            meters.declare_value_ids(slot, table->ids, table->ids_length);
+                meters.declare_value_ids(slot, table->ids, table->ids_length);
+            }
         }
 
         read_allowed = true;
@@ -1782,6 +1876,8 @@ void MeterModbusTCP::parse_next()
     if (is_deye_hybrid_inverter_battery_meter()
      && generic_read_request.start_address == DEYE_HYBRID_INVERTER_DEVICE_TYPE_ADDRESS) {
         if (deye_hybrid_inverter.device_type < 0) {
+            bool success = true;
+
             switch (c16.u) {
             case 0x0002:
             case 0x0003:
@@ -1801,14 +1897,16 @@ void MeterModbusTCP::parse_next()
                 break;
 
             default:
-                table = nullptr;
+                success = false;
                 logger.printfln_meter("Deye hybrid inverter has unknown device type: 0x%04x", c16.u);
-                return;
+                break;
             }
 
-            deye_hybrid_inverter.device_type = c16.u;
+            if (success) {
+                deye_hybrid_inverter.device_type = c16.u;
 
-            meters.declare_value_ids(slot, table->ids, table->ids_length);
+                meters.declare_value_ids(slot, table->ids, table->ids_length);
+            }
         }
 
         read_allowed = true;
@@ -1821,7 +1919,9 @@ void MeterModbusTCP::parse_next()
 
     if (is_fronius_gen24_plus_battery_meter()
      && generic_read_request.start_address == FRONIUS_GEN24_PLUS_INPUT_ID_OR_MODEL_ID_ADDRESS) {
-        if (fronius_gen24_plus.input_id_or_model_id == 0) {
+        if (fronius_gen24_plus.input_id_or_model_id < 0) {
+            bool success = true;
+
             switch (c16.u) {
             case 1: // module/1/ID: Input ID
                 table = &fronius_gen24_plus_battery_integer_table;
@@ -1836,14 +1936,16 @@ void MeterModbusTCP::parse_next()
                 break;
 
             default:
-                table = nullptr;
+                success = false;
                 logger.printfln_meter("Fronius GEN24 Plus inverter has malformed MPPT model: %u", c16.u);
-                return;
+                break;
             }
 
-            fronius_gen24_plus.input_id_or_model_id = c16.u;
+            if (success) {
+                fronius_gen24_plus.input_id_or_model_id = c16.u;
 
-            meters.declare_value_ids(slot, table->ids, table->ids_length);
+                meters.declare_value_ids(slot, table->ids, table->ids_length);
+            }
         }
 
         read_allowed = true;
@@ -1856,10 +1958,12 @@ void MeterModbusTCP::parse_next()
 
     if (is_huawei_sun2000_battery_meter()
      && generic_read_request.start_address == HUAWEI_SUN2000_ENERGY_STORAGE_PRODUCT_MODEL_ADDRESS) {
-        if (huawei_sun2000.energy_storage_product_model == -1) {
+        if (huawei_sun2000.energy_storage_product_model < 0) {
+            bool success = true;
+
             switch (c16.u) {
             case 0: // None
-                table = nullptr;
+                success = false;
                 logger.printfln_meter("Huawei SUN2000 inverter has no battery connected");
                 return;
 
@@ -1874,14 +1978,16 @@ void MeterModbusTCP::parse_next()
                 break;
 
             default:
-                table = nullptr;
+                success = false;
                 logger.printfln_meter("Huawei SUN2000 inverter has unknown battery model: %u", c16.u);
-                return;
+                break;
             }
 
-            huawei_sun2000.energy_storage_product_model = c16.u;
+            if (success) {
+                huawei_sun2000.energy_storage_product_model = c16.u;
 
-            meters.declare_value_ids(slot, table->ids, table->ids_length);
+                meters.declare_value_ids(slot, table->ids, table->ids_length);
+            }
         }
 
         read_allowed = true;
@@ -1894,7 +2000,7 @@ void MeterModbusTCP::parse_next()
 
     if (is_huawei_sun2000_pv_meter()
      && generic_read_request.start_address == HUAWEI_SUN2000_NUMBER_OF_PV_STRINGS_ADDRESS) {
-        if (huawei_sun2000.number_of_pv_strings == -1) {
+        if (huawei_sun2000.number_of_pv_strings < 0) {
             switch (c16.u) {
             case 0:
                 table = &huawei_sun2000_pv_no_strings_table;
@@ -1953,6 +2059,48 @@ void MeterModbusTCP::parse_next()
         return;
     }
 
+    if (is_huawei_sun2000_smart_dongle_battery_meter()
+     && generic_read_request.start_address == HUAWEI_SUN2000_ENERGY_STORAGE_PRODUCT_MODEL_ADDRESS) {
+        if (huawei_sun2000_smart_dongle.energy_storage_product_model < 0) {
+            bool success = true;
+
+            switch (c16.u) {
+            case 0: // None
+                success = false;
+                logger.printfln_meter("Huawei SUN2000 inverter has no battery connected");
+                return;
+
+            case 1: // LG RESU
+                table = &huawei_sun2000_smart_dongle_battery_lg_resu_table;
+                logger.printfln_meter("Huawei SUN2000 inverter with LG RESU battery detected");
+                break;
+
+            case 2: // Huawei LUNA2000
+                table = &huawei_sun2000_smart_dongle_battery_huawei_luna2000_table;
+                logger.printfln_meter("Huawei SUN2000 inverter with Huawei LUNA2000 battery detected");
+                break;
+
+            default:
+                success = false;
+                logger.printfln_meter("Huawei SUN2000 inverter has unknown battery model: %u", c16.u);
+                return;
+            }
+
+            if (success) {
+                huawei_sun2000_smart_dongle.energy_storage_product_model = c16.u;
+
+                meters.declare_value_ids(slot, table->ids, table->ids_length);
+            }
+        }
+
+        read_allowed = true;
+        read_index = 0;
+        register_buffer_index = METER_MODBUS_TCP_REGISTER_BUFFER_SIZE;
+
+        prepare_read();
+        return;
+    }
+
     if (is_sungrow_grid_meter()) {
         if (register_start_address == SUNGROW_INVERTER_GRID_FREQUENCY_ADDRESS) {
             if (value > 100) {
@@ -1971,14 +2119,16 @@ void MeterModbusTCP::parse_next()
         if (register_start_address == SUNGROW_HYBRID_INVERTER_RUNNING_STATE_ADDRESS) {
             sungrow_hybrid_inverter.running_state = c16.u;
         }
-        else if (register_start_address == SUNGROW_HYBRID_INVERTER_BATTERY_CURRENT_ADDRESS) {
+        else if (register_start_address == SUNGROW_HYBRID_INVERTER_BATTERY_CURRENT_ADDRESS
+              || register_start_address == SUNGROW_HYBRID_INVERTER_BATTERY_POWER_ADDRESS) {
+            // it seems that from october 2024 the running-state register stays at 0 and
+            // the current and power values are reported signed already
+            //
+            // https://github.com/evcc-io/evcc/issues/18270
+            // https://github.com/mkaiser/Sungrow-SHx-Inverter-Modbus-Home-Assistant/blob/a3b82db9a3b33bdda5c35108578d4c7685f82f7d/modbus_sungrow.yaml#L1281
             if ((sungrow_hybrid_inverter.running_state & (1 << 2)) != 0) {
-                value = zero_safe_negation(value);
-            }
-        }
-        else if (register_start_address == SUNGROW_HYBRID_INVERTER_BATTERY_POWER_ADDRESS) {
-            if ((sungrow_hybrid_inverter.running_state & (1 << 2)) != 0) {
-                value = zero_safe_negation(value);
+                // discharging flag is set, assume unsigned value, but fabs anyway to be sure
+                value = zero_safe_negation(fabs(value));
             }
         }
     }
@@ -2058,10 +2208,30 @@ void MeterModbusTCP::parse_next()
                         + deye_hybrid_inverter.pv3_power
                         + deye_hybrid_inverter.pv4_power;
 
-            float voltage = (deye_hybrid_inverter.pv1_voltage
-                          +  deye_hybrid_inverter.pv2_voltage
-                          +  deye_hybrid_inverter.pv3_voltage
-                          +  deye_hybrid_inverter.pv4_voltage) / 4; // FIXME: how to handle unused strings?
+            float voltage_sum = 0.0f;
+            float voltage_count = 0.0f;
+
+            if (!is_exactly_zero(deye_hybrid_inverter.pv1_voltage)) {
+                voltage_sum += deye_hybrid_inverter.pv1_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(deye_hybrid_inverter.pv2_voltage)) {
+                voltage_sum += deye_hybrid_inverter.pv2_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(deye_hybrid_inverter.pv3_voltage)) {
+                voltage_sum += deye_hybrid_inverter.pv3_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(deye_hybrid_inverter.pv4_voltage)) {
+                voltage_sum += deye_hybrid_inverter.pv4_voltage;
+                ++voltage_count;
+            }
+
+            float voltage = voltage_sum / voltage_count;
 
             float current = deye_hybrid_inverter.pv1_current
                           + deye_hybrid_inverter.pv2_current
@@ -2072,6 +2242,116 @@ void MeterModbusTCP::parse_next()
             meters.update_value(slot, table->index[read_index + 2], zero_safe_negation(power));
             meters.update_value(slot, table->index[read_index + 3], voltage);
             meters.update_value(slot, table->index[read_index + 4], current);
+        }
+    }
+    else if (is_alpha_ess_hybrid_inverter_pv_meter()) {
+        if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV1_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv1_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV1_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv1_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV1_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv1_power = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV2_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv2_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV2_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv2_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV2_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv2_power = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV3_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv3_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV3_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv3_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV3_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv3_power = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV4_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv4_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV4_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv4_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV4_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv4_power = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV5_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv5_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV5_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv5_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV5_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv5_power = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV6_VOLTAGE_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv6_voltage = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV6_CURRENT_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv6_current = value;
+        }
+        else if (register_start_address == ALPHA_ESS_HYBRID_INVERTER_PV6_POWER_ADDRESS) {
+            alpha_ess_hybrid_inverter.pv6_power = value;
+
+            float voltage_sum = 0.0f;
+            float voltage_count = 0.0f;
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv1_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv1_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv2_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv2_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv3_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv3_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv4_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv4_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv5_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv5_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(alpha_ess_hybrid_inverter.pv6_voltage)) {
+                voltage_sum += alpha_ess_hybrid_inverter.pv6_voltage;
+                ++voltage_count;
+            }
+
+            float voltage = voltage_sum / voltage_count;
+
+            float current = alpha_ess_hybrid_inverter.pv1_current
+                          + alpha_ess_hybrid_inverter.pv2_current
+                          + alpha_ess_hybrid_inverter.pv3_current
+                          + alpha_ess_hybrid_inverter.pv4_current
+                          + alpha_ess_hybrid_inverter.pv5_current
+                          + alpha_ess_hybrid_inverter.pv6_current;
+
+            float power = alpha_ess_hybrid_inverter.pv1_power
+                        + alpha_ess_hybrid_inverter.pv2_power
+                        + alpha_ess_hybrid_inverter.pv3_power
+                        + alpha_ess_hybrid_inverter.pv4_power
+                        + alpha_ess_hybrid_inverter.pv5_power
+                        + alpha_ess_hybrid_inverter.pv6_power;
+
+            meters.update_value(slot, table->index[read_index + 1], voltage);
+            meters.update_value(slot, table->index[read_index + 2], current);
+            meters.update_value(slot, table->index[read_index + 3], power);
+            meters.update_value(slot, table->index[read_index + 4], zero_safe_negation(power));
         }
     }
     else if (is_shelly_pro_xem_monophase()) {
@@ -2196,11 +2476,11 @@ void MeterModbusTCP::parse_next()
         else if (start_address == FRONIUS_GEN24_PLUS_CHASTATE_SF_ADDRESS) {
             fronius_gen24_plus.chastate_sf = static_cast<int16_t>(c16.u); // SunSpec: sunssf
 
-            float dca_scale_factor = get_fronius_scale_factor(fronius_gen24_plus.dca_sf);
-            float dcv_scale_factor = get_fronius_scale_factor(fronius_gen24_plus.dcv_sf);
-            float dcw_scale_factor = get_fronius_scale_factor(fronius_gen24_plus.dcw_sf);
-            float dcwh_scale_factor = get_fronius_scale_factor(fronius_gen24_plus.dcwh_sf);
-            float chastate_scale_factor = get_fronius_scale_factor(fronius_gen24_plus.chastate_sf);
+            float dca_scale_factor = get_sun_spec_scale_factor(fronius_gen24_plus.dca_sf);
+            float dcv_scale_factor = get_sun_spec_scale_factor(fronius_gen24_plus.dcv_sf);
+            float dcw_scale_factor = get_sun_spec_scale_factor(fronius_gen24_plus.dcw_sf);
+            float dcwh_scale_factor = get_sun_spec_scale_factor(fronius_gen24_plus.dcwh_sf);
+            float chastate_scale_factor = get_sun_spec_scale_factor(fronius_gen24_plus.chastate_sf);
 
             float charge_dca = fronius_gen24_plus.charge_dca * dca_scale_factor;
             float charge_dcv = fronius_gen24_plus.charge_dcv * dcv_scale_factor;
@@ -2223,6 +2503,116 @@ void MeterModbusTCP::parse_next()
             meters.update_value(slot, table->index[read_index + 4], state_of_charge);
             meters.update_value(slot, table->index[read_index + 5], energy_charge);
             meters.update_value(slot, table->index[read_index + 6], energy_discharge);
+        }
+    }
+    else if (is_hailei_hybrid_inverter_pv_meter()) {
+        if (register_start_address == HAILEI_HYBRID_INVERTER_PV1_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv1_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV1_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv1_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV1_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv1_power = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV2_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv2_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV2_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv2_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV2_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv2_power = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV3_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv3_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV3_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv3_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV3_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv3_power = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV4_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv4_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV4_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv4_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV4_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv4_power = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV5_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv5_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV5_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv5_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV5_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv5_power = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV6_VOLTAGE_ADDRESS) {
+            hailei_hybrid_inverter.pv6_voltage = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV6_CURRENT_ADDRESS) {
+            hailei_hybrid_inverter.pv6_current = value;
+        }
+        else if (register_start_address == HAILEI_HYBRID_INVERTER_PV6_POWER_ADDRESS) {
+            hailei_hybrid_inverter.pv6_power = value;
+
+            float voltage_sum = 0.0f;
+            float voltage_count = 0.0f;
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv1_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv1_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv2_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv2_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv3_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv3_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv4_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv4_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv5_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv5_voltage;
+                ++voltage_count;
+            }
+
+            if (!is_exactly_zero(hailei_hybrid_inverter.pv6_voltage)) {
+                voltage_sum += hailei_hybrid_inverter.pv6_voltage;
+                ++voltage_count;
+            }
+
+            float voltage = voltage_sum / voltage_count;
+
+            float current = hailei_hybrid_inverter.pv1_current
+                          + hailei_hybrid_inverter.pv2_current
+                          + hailei_hybrid_inverter.pv3_current
+                          + hailei_hybrid_inverter.pv4_current
+                          + hailei_hybrid_inverter.pv5_current
+                          + hailei_hybrid_inverter.pv6_current;
+
+            float power = hailei_hybrid_inverter.pv1_power
+                        + hailei_hybrid_inverter.pv2_power
+                        + hailei_hybrid_inverter.pv3_power
+                        + hailei_hybrid_inverter.pv4_power
+                        + hailei_hybrid_inverter.pv5_power
+                        + hailei_hybrid_inverter.pv6_power;
+
+            meters.update_value(slot, table->index[read_index + 1], voltage);
+            meters.update_value(slot, table->index[read_index + 2], current);
+            meters.update_value(slot, table->index[read_index + 3], power);
+            meters.update_value(slot, table->index[read_index + 4], zero_safe_negation(power));
         }
     }
     else if (is_carlo_gavazzi_em100_or_et100()) {
@@ -2290,6 +2680,21 @@ void MeterModbusTCP::parse_next()
     }
     else if (is_huawei_sun2000_pv_meter()) {
         if (register_start_address == HUAWEI_SUN2000_INPUT_POWER_ADDRESS) {
+            meters.update_value(slot, table->index[read_index + 1], zero_safe_negation(value));
+        }
+    }
+    else if (is_huawei_sun2000_smart_dongle_pv_meter()) {
+        if (register_start_address == HUAWEI_SUN2000_SMART_DONGLE_INPUT_POWER_ADDRESS) {
+            meters.update_value(slot, table->index[read_index + 1], zero_safe_negation(value));
+        }
+    }
+    else if (is_huawei_emma_load_meter()) {
+        if (register_start_address == HUAWEI_EMMA_LOAD_POWER_ADDRESS) {
+            meters.update_value(slot, table->index[read_index + 1], value);
+        }
+    }
+    else if (is_huawei_emma_pv_meter()) {
+        if (register_start_address == HUAWEI_EMMA_PV_OUTPUT_POWER_ADDRESS) {
             meters.update_value(slot, table->index[read_index + 1], zero_safe_negation(value));
         }
     }

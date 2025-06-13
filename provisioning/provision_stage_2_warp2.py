@@ -45,6 +45,7 @@ generation = None
 def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
     global evse
     global generation
+
     enumerations = enumerate_devices(ipcon)
 
     master = next((e for e in enumerations if e.device_identifier == 13), None)
@@ -70,6 +71,9 @@ def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
 
     is_smart = not is_basic and energy_meter_type == 0
     is_pro = not is_basic and energy_meter_type != 0
+
+    if is_smart or is_pro:
+        host = ssid + ".local"
 
     automatic = scanner.qr_stand == '0' or scanner.qr_stand_wiring == '0'
 
@@ -124,7 +128,7 @@ def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
     if is_smart or is_pro:
         if scanner.qr_stand != '0' and scanner.qr_stand_wiring != '0':
             def download_seen_tags():
-                with urllib.request.urlopen('http://{}/nfc/seen_tags'.format(ssid), timeout=3) as f:
+                with urllib.request.urlopen('http://{}/nfc/seen_tags'.format(host), timeout=3) as f:
                     nfc_str = f.read()
 
                 local_seen_tags = []
@@ -139,7 +143,7 @@ def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
 
             seen_tags = collect_nfc_tag_ids(stage3, download_seen_tags, True)
         else:
-            with urllib.request.urlopen('http://{}/nfc/seen_tags'.format(ssid), timeout=3) as f:
+            with urllib.request.urlopen('http://{}/nfc/seen_tags'.format(host), timeout=3) as f:
                 nfc_str = f.read()
 
             nfc_data = json.loads(nfc_str)
@@ -191,7 +195,7 @@ def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
     result["resistor_checked"] = True
 
     if is_pro:
-        meter_str = urllib.request.urlopen('http://{}/meter/live'.format(ssid), timeout=3).read()
+        meter_str = urllib.request.urlopen('http://{}/meter/live'.format(host), timeout=3).read()
         meter_data = json.loads(meter_str)
         sps = meter_data["samples_per_second"]
         samples = meter_data["samples"]
@@ -214,7 +218,7 @@ def run_bricklet_tests(ipcon, result, scanner, ssid, stage3):
 
         result["energy_meter_reachable"] = True
 
-        meter_str = urllib.request.urlopen('http://{}/meter/values'.format(ssid), timeout=3).read()
+        meter_str = urllib.request.urlopen('http://{}/meter/values'.format(host), timeout=3).read()
         meter_data = json.loads(meter_str)
         if meter_data["energy_abs"] >= 1:
             stage3.beep_notify()
@@ -485,7 +489,7 @@ def factory_reset(ssid):
 
 def connect_to_ethernet(ssid, url):
     host = ssid + ".local"
-    print("Connecting via ethernet to {}".format(host), end="")
+    print("Connecting via ethernet to {} [{}]".format(host, url), end="")
     for i in range(45):
         start = time.monotonic()
         try:
@@ -574,6 +578,7 @@ def main(stage3, scanner):
 
         result["uid"] = scanner.qr_esp_uid
         ssid = scanner.qr_hardware_type + "-" + scanner.qr_esp_uid
+        host = ssid + ".local"
         event_log = connect_to_ethernet(ssid, "event_log")[0].decode('utf-8')
 
         m = re.search(r"WARP{gen} (?:CHARGER|Charger) V(\d+).(\d+).(\d+)".format(gen=scanner.qr_gen), event_log)
@@ -594,7 +599,7 @@ def main(stage3, scanner):
             opener = urllib.request.build_opener(ContentTypeRemover())
             for i in range(5):
                 try:
-                    req = urllib.request.Request("http://{}/flash_firmware".format(ssid), fw)
+                    req = urllib.request.Request("http://{}/flash_firmware".format(host), fw)
                     print(opener.open(req).read().decode())
                     break
                 except urllib.error.HTTPError as e:
@@ -614,13 +619,14 @@ def main(stage3, scanner):
                         fatal_error("Can't flash firmware!")
 
             time.sleep(3)
+            connect_to_ethernet(ssid, "firmware_update/validate")
             factory_reset(ssid)
         else:
             print("Flashed firmware is up-to-date.")
 
         result["firmware"] = firmware_path.split("/")[-1]
 
-        _, host = connect_to_ethernet(ssid, "hidden_proxy/enable")
+        host = connect_to_ethernet(ssid, "hidden_proxy/enable")[1]
 
         ipcon = IPConnection()
         try:
@@ -634,7 +640,7 @@ def main(stage3, scanner):
             seen_tags = seen_tags2
 
         try:
-            with urllib.request.urlopen("http://{}/users/config".format(ssid), timeout=5) as f:
+            with urllib.request.urlopen("http://{}/users/config".format(host), timeout=5) as f:
                 user_config = json.loads(f.read())
         except Exception as e:
             fatal_error("Failed to get users config: {} {}!".format(e, e.read()))
@@ -673,7 +679,7 @@ def main(stage3, scanner):
                     "username": "user{}".format(i+1),
                     "digest_hash": ""
                 }).encode("utf-8")
-                req = urllib.request.Request("http://{}/users/add".format(ssid),
+                req = urllib.request.Request("http://{}/users/add".format(host),
                                              data=json.dumps({
                                                  "id": i + 1,
                                                  "roles": 2 ** 16 - 1,
@@ -691,7 +697,7 @@ def main(stage3, scanner):
                     fatal_error("Failed to configure user {}: {} {}!".format(i, e, e.read()))
 
         print("Configuring tags")
-        req = urllib.request.Request("http://{}/nfc/config_update".format(ssid),
+        req = urllib.request.Request("http://{}/nfc/config_update".format(host),
                                      data=json.dumps({
                                          "deadtime_post_start": None,
                                          "authorized_tags": [
@@ -754,12 +760,13 @@ def main(stage3, scanner):
 
     if scanner.qr_variant == "B":
         ssid = f'warp{scanner.qr_gen}-{result["evse_uid"]}'
+        host = ssid + ".local"
 
     browser = None
     try:
         if scanner.qr_variant != "B":
             browser = webdriver.Firefox()
-            browser.get("http://{}/#evse".format(ssid))
+            browser.get("http://{}/#evse".format(host))
 
         print("Performing the electrical tests")
         stage3.test_wallbox(has_phase_switch=generation >= 3)

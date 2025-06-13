@@ -808,3 +808,38 @@
 - Add remote access section to status page
 - Add more help texts to web interface
 - Update core software libraries (ESP-IDF 5.4 and arduino-esp32 3.2)
+
+2025-05-15: 2.8.1 (90e590cd)
+- Charge Tracker: Fix summary in PDF export
+- Charge Manager: Fix incorrect phase switching in Min+PV mode
+- Modbus TCP: Fix inverter power and battery current sign for Alpha ESS and Hailei hybrid inverters
+- Modbus TCP: Add reduced register set for Huawei SUN2000 with Smart Dongle
+- Modbus TCP: Add PV virtual meter for Alpha ESS and Hailei hybrid inverters
+- Modbus TCP and SunSpec: Device address range limitation of 1 to 247 removed
+- Dynamic Load Management: Reduce lower bound for maximum grid current from 20A to 16A
+- Modbus TCP Server: Allow to choose if writes in read-only mode are silently ignored or produce and error response
+- Fix login dialog for Firefox and Chrome on iOS
+- Show warning for unexpected reboots
+- Improve translations
+
+2025-05-19: 2.8.2 (a1c1a380)
+- Charge Manager: Fix phase switching in PV mode
+
+2025-06-02: 2.8.3 (201b466a)
+- SunSpec: Adapt to changes since KOSTAL Smart Energy Meter firmware 2.6.0
+- SunSpec: Fix power factor for SMA inverters
+- SunSpec: Fix energy export/import mix up for model 714
+- Modbus TCP: Fix crash with empty custom register table
+- Modbus TCP: Fix Fox ESS grid export scale factor
+- Modbus TCP: Add support for Huawei EMMA
+- Improve SMA Speedwire robustness
+- Add optional SMA Speedwire serial number filter
+- Charge Manager: Allow maximum current limit automation also while PV excess charging and dynamic load management are disabled
+- Charge Manager: Fix watchdog not resetting the available current correctly
+- Charge Tracker: Save PDF letterhead
+- Speed up establishing WiFi connection
+- Speed up WiFi network scan
+- Speed up Ethernet initialization
+- Improve meter availability check robustness
+- Extend network address misconfiguration detection
+- Improve translations

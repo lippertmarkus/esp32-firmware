@@ -35,14 +35,11 @@
 // Indirection expands macro. See https://gcc.gnu.org/onlinedocs/gcc-3.4.3/cpp/Stringification.html
 #define MACRO_VALUE_TO_STRING(x) MACRO_NAME_TO_STRING(x)
 
-const char *tf_reset_reason();
+const char *tf_reset_reason(uint32_t *numeric_reason_out = nullptr);
 
 bool a_after_b(uint32_t a, uint32_t b);
 
 void read_efuses(uint32_t *ret_uid_num, char *ret_uid_str, char *ret_passphrase);
-
-int compare_version(uint8_t left_major, uint8_t left_minor, uint8_t left_patch, uint8_t left_beta /* 255 == no beta */, uint32_t left_timestamp,
-                    uint8_t right_major, uint8_t right_minor, uint8_t right_patch, uint8_t right_beta /* 255 == no beta */, uint32_t right_timestamp);
 
 extern TaskHandle_t mainTaskHandle;
 void set_main_task_handle();

@@ -149,11 +149,17 @@ class DeviceScanner extends Component<DeviceScannerProps, DeviceScannerState> {
             let unique_id = scan_result.manufacturer_name + scan_result.model_name + scan_result.serial_number;
 
             if (this.state.scan_results.filter((other) => other.unique_id == unique_id && other.model_id == scan_result.model_id && other.model_instance == scan_result.model_instance).length == 0) {
+                let manufacturer_name = scan_result.manufacturer_name.trim();
+
+                if (manufacturer_name == 'KOSTAL Solar Electric GmbH') {
+                    manufacturer_name = 'KOSTAL';
+                }
+
                 this.setState({scan_results: this.state.scan_results.concat({
                     unique_id: unique_id,
                     manufacturer_name: scan_result.manufacturer_name,
                     model_name: scan_result.model_name,
-                    display_name: removeUnicodeHacks((scan_result.model_name.startsWith(scan_result.manufacturer_name) ? scan_result.model_name.trim() : scan_result.manufacturer_name.trim() + ' ' + scan_result.model_name.trim()) + ': ' + translate_unchecked(`meters_sun_spec.content.model_${scan_result.model_id}`)).substring(0, 65),
+                    display_name: removeUnicodeHacks((scan_result.model_name.startsWith(manufacturer_name) ? scan_result.model_name.trim() : manufacturer_name + ' ' + scan_result.model_name.trim()) + ': ' + translate_unchecked(`meters_sun_spec.content.model_${scan_result.model_id}`)).substring(0, 65),
                     serial_number: scan_result.serial_number,
                     device_address: scan_result.device_address,
                     model_id: scan_result.model_id,
@@ -295,8 +301,8 @@ class DeviceScanner extends Component<DeviceScannerProps, DeviceScannerState> {
                     <div class="col-sm-6">
                         <InputNumber
                             required
-                            min={1}
-                            max={247}
+                            min={0}
+                            max={255}
                             value={this.state.scan_device_address_first}
                             onValue={(v) => {
                                 this.setState({scan_device_address_first: v});
@@ -305,8 +311,8 @@ class DeviceScanner extends Component<DeviceScannerProps, DeviceScannerState> {
                     <div class="col-sm-6">
                         <InputNumber
                             required
-                            min={1}
-                            max={247}
+                            min={0}
+                            max={255}
                             value={this.state.scan_device_address_last}
                             onValue={(v) => {
                                 this.setState({scan_device_address_last: v});
@@ -396,7 +402,7 @@ class DeviceScanner extends Component<DeviceScannerProps, DeviceScannerState> {
                     <Button variant="primary"
                             disabled={this.state.scan_running || this.state.scan_log.length == 0}
                             className="form-control"
-                            onClick={() => util.downloadToFile(this.state.scan_log, __("meters_sun_spec.content.scan_log_file"), "txt", "text/plain")}>
+                            onClick={() => util.downloadToTimestampedFile(this.state.scan_log, __("meters_sun_spec.content.scan_log_file"), "txt", "text/plain")}>
                         <span class="mr-2">{__("meters_sun_spec.content.scan_log")}</span>
                         <Download/>
                     </Button>
@@ -539,8 +545,8 @@ class EditChildren extends Component<EditChildrenProps, EditChildrenState> {
                 <InputNumber
                     required
                     disabled={!this.state.manual_override}
-                    min={1}
-                    max={247}
+                    min={0}
+                    max={255}
                     value={this.props.config[1].device_address}
                     onValue={(v) => {
                         this.props.on_config(util.get_updated_union(this.props.config, {device_address: v}));

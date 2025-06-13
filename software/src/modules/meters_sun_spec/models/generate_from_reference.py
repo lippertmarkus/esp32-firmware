@@ -490,6 +490,7 @@ r"""// WARNING: This file is generated.
 #include <stdint.h>
 
 #include "../model_parser.h"
+#include "tools/sun_spec.h"
 
 #include "gcc_warnings.h"
 
@@ -497,48 +498,6 @@ r"""// WARNING: This file is generated.
     #pragma GCC diagnostic ignored "-Wpedantic"
     #pragma GCC diagnostic ignored "-Waddress-of-packed-member" // We should fix this soon.
 #endif
-
-static const float scale_factors[21] = {
-              0.0000000001f,    // 10^-10
-              0.000000001f,     // 10^-9
-              0.00000001f,      // 10^-8
-              0.0000001f,       // 10^-7
-              0.000001f,        // 10^-6
-              0.00001f,         // 10^-5
-              0.0001f,          // 10^-4
-              0.001f,           // 10^-3
-              0.01f,            // 10^-2
-              0.1f,             // 10^-1
-              1.0f,             // 10^0
-             10.0f,             // 10^1
-            100.0f,             // 10^2
-           1000.0f,             // 10^3
-          10000.0f,             // 10^4
-         100000.0f,             // 10^5
-        1000000.0f,             // 10^6
-       10000000.0f,             // 10^7
-      100000000.0f,             // 10^8
-     1000000000.0f,             // 10^9
-    10000000000.0f,             // 10^10
-};
-
-float get_sun_spec_scale_factor(int32_t sunssf);
-
-[[gnu::const]]
-float get_sun_spec_scale_factor(int32_t sunssf)
-{
-    if (sunssf < -10) {
-        if (sunssf == INT16_MIN) { // scale factor not implemented
-            return 1;
-        } else {
-            return NAN;
-        }
-    } else if (sunssf > 10) {
-        return NAN;
-    }
-
-    return scale_factors[sunssf + 10];
-}
 
 static inline uint32_t convert_me_uint32(const uint32_t *me32, bool is_already_le32 = false)
 {
@@ -625,7 +584,7 @@ for model in models:
         usable_value_count += 1
 
         value_is_active_power = re.match(r"^PowerActiveL.+ImExDiff$", value_id_mapping[0])
-        value_is_inverter_current = model_id >= 100 and model_id < 200 and re.match(r"^CurrentL.Export$", value_id_mapping[0])
+        value_is_integer_inverter_current = model_id >= 100 and model_id < 110 and re.match(r"^CurrentL.Export$", value_id_mapping[0])
         value_is_integer_meter_power_factor = model_id >= 200 and model_id < 210 and re.match(r"^PowerFactorL.+Directional$", value_id_mapping[0])
         value_is_integer_inverter_power_factor = model_id >= 100 and model_id < 110 and re.match(r"^PowerFactorL.+Directional$", value_id_mapping[0])
         value_is_der_phase_current = model_id >= 700 and model_id < 800 and re.match(r"^CurrentL[123]ImExDiff$", value_id_mapping[0])
@@ -669,8 +628,8 @@ for model in models:
             else:
                 print_cpp(r"    if (val == INT16_MIN) return NAN;")
         elif field_type == "uint16":
-            if value_is_inverter_current:
-                print_cpp(r"    uint16_t not_implemented_val = (quirks & SUN_SPEC_QUIRKS_INVERTER_CURRENT_IS_INT16) == 0 ? UINT16_MAX : 0x8000u;")
+            if value_is_integer_inverter_current:
+                print_cpp(r"    uint16_t not_implemented_val = (quirks & SUN_SPEC_QUIRKS_INTEGER_INVERTER_CURRENT_IS_INT16) == 0 ? UINT16_MAX : 0x8000u;")
                 print_cpp(r"    if (val == not_implemented_val) return NAN;")
             else:
                 print_cpp(r"    if (val == UINT16_MAX) return NAN;")
@@ -694,9 +653,9 @@ for model in models:
         if field_type == "float32":
             print_cpp(r"    float fval = val;")
         elif field_type == "uint16":
-            if value_is_inverter_current:
+            if value_is_integer_inverter_current:
                 print_cpp(r"    float fval;")
-                print_cpp(r"    if ((quirks & SUN_SPEC_QUIRKS_INVERTER_CURRENT_IS_INT16) == 0) {")
+                print_cpp(r"    if ((quirks & SUN_SPEC_QUIRKS_INTEGER_INVERTER_CURRENT_IS_INT16) == 0) {")
                 print_cpp(r"        fval = static_cast<float>(val);")
                 print_cpp(r"    } else {")
                 print_cpp(r"        int16_t sval = static_cast<int16_t>(val);")

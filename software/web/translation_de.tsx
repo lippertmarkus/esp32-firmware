@@ -37,7 +37,6 @@ let x = {
             "subnet_placeholder": "Auswählen...",
             "gateway": "Gateway",
             "dns": "DNS-Server",
-            "dns_muted": "optional",
             "dns2": "Alternativer DNS-Server",
             "dns2_muted": "optional",
             "static_ip_invalid": "Die IP-Adresse muss aus vier Gruppen mit jeweils einer Zahl zwischen 0 und 255, getrennt durch einen Punkt, bestehen. Zum Beispiel 10.0.0.2",
@@ -52,7 +51,8 @@ let x = {
             "wifi_ap": "den WLAN-Access-Point",
             "wifi_sta": "die WLAN-Verbindung",
             "ethernet": "die LAN-Verbindung",
-            "wireguard": "die WireGuard-Verbindung"
+            "wireguard": "die WireGuard-Verbindung",
+            "remote_access": "den Fernzugriff"
         },
         "collapsed_section": {
             "heading": "Details",
@@ -70,6 +70,11 @@ let x = {
             "max_only": /*SFN*/ (max: string, unit: string) => `Maximal ${max} ${unit} erlaubt`/*NF*/,
             "min_max": /*SFN*/ (min: string, max: string, unit: string) => `Mindestens ${min} ${unit} erforderlich, aber maximal ${max} ${unit} erlaubt`/*NF*/,
             "required": "Feld darf nicht leer sein"
+        },
+        "input_any_float": {
+            "min_only": /*SFN*/ (min: number) => `Mindestens ${min} erforderlich`/*NF*/,
+            "max_only": /*SFN*/ (max: number) => `Maximal ${max} erlaubt`/*NF*/,
+            "min_max": /*SFN*/ (min: number, max: number) => `Mindestens ${min} erforderlich, aber maximal ${max} erlaubt`/*NF*/
         },
         "input_file": {
             "uploading": "wird hochgeladen..."
@@ -134,12 +139,14 @@ let x = {
         "The": null,
         "this": null,
         "This": null,
-        "to_the": null
+        "to_the": null,
+        "from_the": null
     },
     "device": <>{__("branding.device")}</>,
     "the_device": <>{__("branding.the")} {__("branding.device")}</>,
     "The_device": <>{__("branding.The")} {__("branding.device")}</>,
     "this_device": <>{__("branding.this")} {__("branding.device")}</>,
     "This_device": <>{__("branding.This")} {__("branding.device")}</>,
-    "to_the_device": <>{__("branding.to_the")} {__("branding.device")}</>
+    "to_the_device": <>{__("branding.to_the")} {__("branding.device")}</>,
+    "from_the_device": <>{__("branding.from_the")} {__("branding.device")}</>
 }

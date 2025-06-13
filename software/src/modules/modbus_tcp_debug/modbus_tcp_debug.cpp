@@ -30,7 +30,7 @@
 
 void ModbusTCPDebug::pre_setup()
 {
-    transact = Config::Object({
+    transact_config = Config::Object({
         {"host", Config::Str("", 0, 64)},
         {"port", Config::Uint16(502)},
         {"device_address", Config::Uint8(0)},
@@ -64,24 +64,32 @@ static void report_errorf(uint32_t cookie, const char *fmt, ...)
 
 void ModbusTCPDebug::register_urls()
 {
-    api.addCommand("modbus_tcp_debug/transact", &transact, {}, [this](String &errmsg) {
-        uint32_t cookie = transact.get("cookie")->asUint();
+    api.addCommand("modbus_tcp_debug/transact", &transact_config, {}, [this](String &errmsg) {
+        uint32_t cookie = transact_config.get("cookie")->asUint();
 
-        if (connected_client != nullptr) {
+        if (transact_client != nullptr) {
             report_errorf(cookie, "Another transaction is already in progress");
             return;
         }
 
-        String host = transact.get("host")->asString();
-        uint16_t port = transact.get("port")->asUint();
-        uint8_t device_address = transact.get("device_address")->asUint();
-        TFModbusTCPFunctionCode function_code = transact.get("function_code")->asEnum<TFModbusTCPFunctionCode>();
-        uint16_t start_address = transact.get("start_address")->asUint();
-        uint16_t data_count = transact.get("data_count")->asUint();
-        String write_data = transact.get("write_data")->asString();
-        millis_t timeout = millis_t{transact.get("timeout")->asUint()};
+        const String &host = transact_config.get("host")->asString();
+        uint16_t port = transact_config.get("port")->asUint();
+        uint8_t device_address = transact_config.get("device_address")->asUint();
+        TFModbusTCPFunctionCode function_code = transact_config.get("function_code")->asEnum<TFModbusTCPFunctionCode>();
+        uint16_t start_address = transact_config.get("start_address")->asUint();
+        uint16_t data_count = transact_config.get("data_count")->asUint();
+        const String &write_data = transact_config.get("write_data")->asString();
+        millis_t timeout = millis_t{transact_config.get("timeout")->asUint()};
         bool hexload_registers = false;
         bool hexdump_registers = false;
+
+        defer {
+            // When done parsing the transaction, drop Strings from config to free memory.
+            // This invalidates the "host" and "write_data" references above, which will
+            // be copied by the lambda before being cleared.
+            transact_config.get("host"      )->clearString();
+            transact_config.get("write_data")->clearString();
+        };
 
         switch (function_code) {
         case TFModbusTCPFunctionCode::ReadCoils:
@@ -121,13 +129,12 @@ void ModbusTCPDebug::register_urls()
                 return;
             }
 
-            connected_client = shared_client;
+            transact_client = shared_client;
             transact_buffer = static_cast<uint16_t *>(malloc(sizeof(uint16_t) * TF_MODBUS_TCP_MAX_READ_REGISTER_COUNT));
 
             if (transact_buffer == nullptr) {
                 report_errorf(cookie, "Cannot allocate transaction buffer");
-
-                release_client = true;
+                release_client();
                 return;
             }
 
@@ -138,22 +145,19 @@ void ModbusTCPDebug::register_urls()
 
                 if (nibble_count > TF_MODBUS_TCP_MAX_WRITE_REGISTER_COUNT * 4) {
                     report_errorf(cookie, "Write data is too long");
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
 
                 if ((nibble_count % 4) != 0) {
                     report_errorf(cookie, "Write data length must be multiple of 4");
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
 
                 if (nibble_count != data_count * 4) {
                     report_errorf(cookie, "Write data nibble count mismatch");
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
 
@@ -161,27 +165,24 @@ void ModbusTCPDebug::register_urls()
 
                 if (data_hexload_len < 0) {
                     report_errorf(cookie, "Write data is malformed");
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
 
                 if (data_hexload_len != data_count) {
                     report_errorf(cookie, "Write data register count mismatch");
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
             }
 
-            static_cast<TFModbusTCPSharedClient *>(connected_client)->transact(device_address, function_code, start_address, data_count, transact_buffer, timeout,
+            static_cast<TFModbusTCPSharedClient *>(transact_client)->transact(device_address, function_code, start_address, data_count, transact_buffer, timeout,
             [this, cookie, data_count, hexdump_registers](TFModbusTCPClientTransactionResult transact_result) {
                 if (transact_result != TFModbusTCPClientTransactionResult::Success) {
                     report_errorf(cookie, "Transaction failed: %s (%d)",
                                   get_tf_modbus_tcp_client_transaction_result_name(transact_result),
                                   static_cast<int>(transact_result));
-
-                    release_client = true;
+                    release_client();
                     return;
                 }
 
@@ -208,16 +209,15 @@ void ModbusTCPDebug::register_urls()
 
                 ws.pushRawStateUpdate(buf, "modbus_tcp_debug/transact_result");
 
-                release_client = true;
+                release_client();
             });
         },
         [this](TFGenericTCPClientDisconnectReason reason, int error_number, TFGenericTCPSharedClient *shared_client) {
-            if (connected_client != shared_client) {
+            if (transact_client != shared_client) {
                 return;
             }
 
-            connected_client = nullptr;
-            release_client = false;
+            transact_client = nullptr;
 
             free(transact_buffer);
             transact_buffer = nullptr;
@@ -225,9 +225,11 @@ void ModbusTCPDebug::register_urls()
     }, true);
 }
 
-void ModbusTCPDebug::loop()
+void ModbusTCPDebug::release_client()
 {
-    if (release_client) {
-        modbus_tcp_client.get_pool()->release(connected_client);
-    }
+    task_scheduler.scheduleOnce([this]() {
+        if (transact_client != nullptr) {
+            modbus_tcp_client.get_pool()->release(transact_client);
+        }
+    });
 }
