@@ -31,6 +31,10 @@
 #define MAX_PEER_REMEMBERED 64 // How man ship peers configured to be remembered
 #define SHIP_AUTODISCOVER_INTERVAL 30_s // How often to autodiscover ship peers
 
+#define EEBUS_DEVICE_MANUFACTURER "Tinkerforge"
+#define EEBUS_DEVICE_MODEL "WARP3"
+#define EEBUS_DEVICE_TYPE "Wallbox"
+
 
 class EEBus final : public IModule
 {
@@ -41,6 +45,12 @@ public:
     void pre_setup() override;
     void setup() override;
     void register_urls() override;
+
+    /**
+     * Returns the Unique Name of the device. Used for mDns, SPINE and the usecases.
+     * @return The unique name of the device.
+     */
+    String get_eebus_name();
 
 
     Config config_peers_prototype;
@@ -66,5 +76,7 @@ private:
      * Update the peers configuration based on the current mDNS results, clean up invalid peers and add trusted peers to the persistent configuration.
      */
     void update_peers_config();
+
+    String device_name {};
 
 };
