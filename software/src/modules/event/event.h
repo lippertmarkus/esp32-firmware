@@ -46,9 +46,10 @@ public:
     void pre_setup() override;
     void setup() override;
 
-
     int64_t registerEvent(const String &path, const std::vector<ConfPath> values, std::function<EventResult(const Config *)> &&callback);
     void deregisterEvent(int64_t eventID);
+
+    inline uint8_t get_api_backend_flag() {return 1 << backendIdx;}
 
     // IAPIBackend implementation
     void addCommand(size_t commandIdx, const CommandRegistration &reg) override;
